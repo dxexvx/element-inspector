@@ -1,8 +1,8 @@
 const queues=new Map();
 // A shared tab state lets the pointer move across HTTP(S) iframe boundaries.
-async function setState(tabId,active){
+async function setState(tabId,active,requestId){
   await chrome.storage.session.set({['tab:'+tabId]:active});
-  try{await chrome.tabs.sendMessage(tabId,{type:'element-inspector:set',active});return true;}
+  try{await chrome.tabs.sendMessage(tabId,{type:'element-inspector:set',active,requestId});return true;}
   catch{return false;}
 }
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     const data=await chrome.storage.session.get('tab:'+tabId),active=Boolean(data['tab:'+tabId]);
     if(message.type==='element-inspector:state'){reply({active});return;}
     const next=message.type==='element-inspector:stop'?false:(typeof message.active==='boolean'?message.active:!active);
-    const ok=await setState(tabId,next);reply({ok,active:next});
+    const ok=await setState(tabId,next,message.requestId);reply({ok,active:next});
   }).catch(()=>reply({ok:false}));
   queues.set(tabId,task);task.finally(()=>{if(queues.get(tabId)===task)queues.delete(tabId);});
   return true;

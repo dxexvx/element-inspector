@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "엘리먼트 검사기",
   "description": "포인터로 요소를 강조하고 CSS 식별자를 복사하여 에이전트에게 정확한 수정 위치를 전달합니다.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "permissions": [
     "storage",
     "clipboardWrite"

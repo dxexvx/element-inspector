@@ -1,6 +1,6 @@
 (() => {
   const {defaults,valid,matches}=ElementInspectorSettings;
-  let shortcut=defaults, active=false, host, shadow, highlight, tooltip, target, pointer, frame, toastTimer, copying=false;
+  let shortcut=defaults, active=false, host, shadow, highlight, tooltip, target, pointer, frame, toastTimer, copying=false, pendingRequest=null;
   chrome.storage.local.get('shortcut').then(data=>{if(valid(data.shortcut)) shortcut=data.shortcut;}).catch(()=>{});
   chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local' && changes.shortcut) shortcut=valid(changes.shortcut.newValue)?changes.shortcut.newValue:defaults;});
   function selector(el) {
@@ -25,6 +25,71 @@
     const local=selector(el), root=el.getRootNode();
     // Shadow boundaries cannot be represented by a single CSS selector.
     return root instanceof ShadowRoot ? `${description(root.host)} >>> ${local}` : local;
+  }
+  const compact=(text,limit=240)=>{
+    const value=String(text || '').replace(/\s+/g,' ').trim();
+    return value.length>limit ? value.slice(0,limit)+'…' : value;
+  };
+  function visibleText(el,limit=240) {
+    // Read rendered text nodes, excluding form values even inside a copied row.
+    if(!el)return '';
+    const excluded='input,textarea,select,script,style,noscript,[contenteditable]:not([contenteditable="false"])';
+    const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+    const parts=[];
+    let node,length=0;
+    while((node=walker.nextNode())) {
+      const owner=node.parentElement;
+      if(!owner || owner.closest(excluded) || !owner.getClientRects().length || getComputedStyle(owner).visibility==='hidden')continue;
+      const text=compact(node.textContent);
+      if(text){parts.push(text);length+=text.length+1;if(length>limit)break;}
+    }
+    return compact(parts.join(' '),limit);
+  }
+  function labelledBy(el) {
+    const root=el.getRootNode();
+    return compact((el.getAttribute('aria-labelledby') || '').split(/\s+/)
+      .map(id=>id && root.getElementById?.(id)).filter(Boolean).map(node=>visibleText(node)).join(' '),120);
+  }
+  function parent(el){return el.parentElement || (el.getRootNode() instanceof ShadowRoot ? el.getRootNode().host : null);}
+  function areaTitle(el) {
+    const heading='h1,h2,h3,h4,h5,h6,[role="heading"],legend';
+    for(let node=el;node;node=parent(node)) {
+      if(node.matches(heading) && visibleText(node))return visibleText(node,120);
+      if(node!==el) {
+        const label=labelledBy(node) || (node.matches('section,article,main,aside,nav,fieldset,[role="region"],[role="dialog"],[role="group"]') && compact(node.getAttribute('aria-label'),120));
+        if(label)return label;
+      }
+      // Only preceding sibling headings (or their header), never a later/unrelated section.
+      for(let sibling=node.previousElementSibling;sibling;sibling=sibling.previousElementSibling) {
+        const title=sibling.matches(heading)?sibling:(sibling.matches('header')?sibling.querySelector(heading):null);
+        if(title && visibleText(title))return visibleText(title,120);
+      }
+    }
+    return '(제목 없음)';
+  }
+  function pageUrl() {
+    const url=new URL(location.href);
+    url.username='';url.password='';
+    const sensitive=/token|password|secret|credential|authorization|session|signature|api.?key|^code$|^key$/i;
+    const clean=params=>{for(const key of [...params.keys()])if(sensitive.test(key))params.delete(key);return params.toString();};
+    clean(url.searchParams);
+    const hash=url.hash.slice(1), split=hash.indexOf('?');
+    if(split>=0) {
+      const query=clean(new URLSearchParams(hash.slice(split+1)));
+      url.hash=hash.slice(0,split)+(query?'?'+query:'');
+    } else if(hash.includes('=')) url.hash=clean(new URLSearchParams(hash));
+    return url.href;
+  }
+  function clipboardText(el,css) {
+    const row=el.closest('li,tr,[role="row"],[role="listitem"]');
+    const name=labelledBy(el) || compact(el.getAttribute('aria-label') || el.getAttribute('alt'));
+    const text=visibleText(el) || name;
+    const lines=[`페이지 URL: ${pageUrl()}`,`문서 제목: ${compact(document.title,200) || '(제목 없음)'}`,`영역 제목: ${areaTitle(el)}`];
+    if(window!==window.top)lines.push(`iframe: ${location.origin}${location.pathname}`);
+    if(row && row!==el && visibleText(row)!==text)lines.push(`항목 텍스트: ${visibleText(row) || '(텍스트 없음)'}`);
+    if(name && name!==text)lines.push(`요소 이름: ${name}`);
+    lines.push(`요소 텍스트: ${text || '(텍스트 없음)'}`,`요소: ${el.localName}`,`id: ${compact(el.id) || '(없음)'}`,`class: ${compact([...el.classList].join(' ')) || '(없음)'}`,`CSS: ${css}`);
+    return lines.join('\n');
   }
   function mount() {
     clearTimeout(toastTimer);
@@ -73,11 +138,16 @@
     if(remove){clearTimeout(toastTimer);host?.remove();host=null;}
   }
   function setActive(value){if(!value){if(active)stop();return;}if(active)return;mount();active=true;draw();place();}
-  chrome.runtime.sendMessage({type:'element-inspector:state'}).then(reply=>setActive(reply.active)).catch(()=>{});
-  function toggle(){const next=!active;setActive(next);chrome.runtime.sendMessage({type:'element-inspector:toggle',active:next}).catch(()=>{});}
+  chrome.runtime.sendMessage({type:'element-inspector:state'}).then(reply=>{if(!pendingRequest)setActive(reply.active);}).catch(()=>{});
+  function sendState(value) {
+    const requestId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);pendingRequest=requestId;
+    chrome.runtime.sendMessage({type:'element-inspector:toggle',active:value,requestId})
+      .catch(()=>{}).finally(()=>{if(pendingRequest===requestId)pendingRequest=null;});
+  }
+  function toggle(){const next=!active;setActive(next);sendState(next);}
   function editable(e){return e.composedPath().some(n=>n instanceof Element && (n.matches('input,textarea,select') || n.isContentEditable));}
   window.addEventListener('keydown',e=>{
-    if((active || host) && e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();stop();chrome.runtime.sendMessage({type:'element-inspector:stop'}).catch(()=>{});return;}
+    if((active || host) && e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();stop();sendState(false);return;}
     if(matches(e,shortcut) && (active || !editable(e))){e.preventDefault();e.stopImmediatePropagation();toggle();}
   },true);
   window.addEventListener('pointermove',e=>{pointer={x:e.clientX,y:e.clientY};schedule();},true);
@@ -92,7 +162,7 @@
       pointer={x:e.clientX,y:e.clientY};draw();
       if(!target) return;
       copying=true;
-      const text=(window===window.top?'':`iframe: ${location.origin}${location.pathname}\n`)+description(target);
+      const css=description(target),text=clipboardText(target,css);
       // Synchronous copy runs in the trusted user click and works on HTTP pages too.
       const previous=document.activeElement, selection=window.getSelection();
       const ranges=selection ? [...Array(selection.rangeCount)].map((_,i)=>selection.getRangeAt(i).cloneRange()) : [];
@@ -102,11 +172,11 @@
       input.remove();previous?.focus?.({preventScroll:true});
       try{selection?.removeAllRanges();ranges.forEach(r=>selection.addRange(r));}catch{}
       copying=false;
-      if(copied){chrome.runtime.sendMessage({type:'element-inspector:stop'}).catch(()=>{});stop(false);highlight.hidden=true;tooltip.textContent=`복사했습니다\n${text}`;place();toastTimer=setTimeout(()=>stop(),1800);}
-      else {tooltip.textContent=`복사하지 못했습니다. 브라우저의 클립보드 권한을 확인하고 다시 클릭하세요.\n${text}`;place();}
+      if(copied){sendState(false);stop(false);highlight.hidden=true;tooltip.textContent=`복사했습니다\n${css}`;place();toastTimer=setTimeout(()=>stop(),1800);}
+      else {tooltip.textContent=`복사하지 못했습니다. 브라우저의 클립보드 권한을 확인하고 다시 클릭하세요.\n${css}`;place();}
     },true);
   }
   chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-    if(message.type==='element-inspector:set'){setActive(message.active);reply({active});}
+    if(message.type==='element-inspector:set'){if(!pendingRequest || message.requestId===pendingRequest)setActive(message.active);reply({active});}
   });
 })();
