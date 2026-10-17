@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "엘리먼트 검사기",
+  "description": "포인터로 요소를 강조하고 CSS 식별자를 복사하여 에이전트에게 정확한 수정 위치를 전달합니다.",
+  "version": "1.0.0",
+  "permissions": [
+    "storage",
+    "clipboardWrite"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "엘리먼트 검사기"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

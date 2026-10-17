@@ -1,0 +1,13 @@
+{
+  "name": "element-inspector",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/browser.cjs",
+    "check": "node --check shared.js && node --check content.js && node --check options.js && node --check popup.js && node --check background.js",
+    "package": "python3 tools/package.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0"
+  }
+}
