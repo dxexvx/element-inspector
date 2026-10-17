@@ -1,8 +1,13 @@
 (() => {
-  const {defaults,valid,matches}=ElementInspectorSettings;
+  const {defaults,valid,matches,normalizeFields}=ElementInspectorSettings;
+  let copyFields=normalizeFields();
   let shortcut=defaults, active=false, host, shadow, highlight, tooltip, target, pointer, frame, toastTimer, copying=false, pendingRequest=null;
-  chrome.storage.local.get('shortcut').then(data=>{if(valid(data.shortcut)) shortcut=data.shortcut;}).catch(()=>{});
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local' && changes.shortcut) shortcut=valid(changes.shortcut.newValue)?changes.shortcut.newValue:defaults;});
+  chrome.storage.local.get(['shortcut','copyFields']).then(data=>{if(valid(data.shortcut)) shortcut=data.shortcut;copyFields=normalizeFields(data.copyFields);}).catch(()=>{});
+  chrome.storage.onChanged.addListener((changes,area)=>{
+    if(area!=='local')return;
+    if(changes.shortcut)shortcut=valid(changes.shortcut.newValue)?changes.shortcut.newValue:defaults;
+    if(changes.copyFields)copyFields=normalizeFields(changes.copyFields.newValue);
+  });
   function selector(el) {
     const root=el.getRootNode();
     const unique=s=>{try{return root.querySelectorAll(s).length===1;}catch{return false;}};
@@ -81,14 +86,23 @@
     return url.href;
   }
   function clipboardText(el,css) {
-    const row=el.closest('li,tr,[role="row"],[role="listitem"]');
-    const name=labelledBy(el) || compact(el.getAttribute('aria-label') || el.getAttribute('alt'));
-    const text=visibleText(el) || name;
-    const lines=[`페이지 URL: ${pageUrl()}`,`문서 제목: ${compact(document.title,200) || '(제목 없음)'}`,`영역 제목: ${areaTitle(el)}`];
-    if(window!==window.top)lines.push(`iframe: ${location.origin}${location.pathname}`);
-    if(row && row!==el && visibleText(row)!==text)lines.push(`항목 텍스트: ${visibleText(row) || '(텍스트 없음)'}`);
-    if(name && name!==text)lines.push(`요소 이름: ${name}`);
-    lines.push(`요소 텍스트: ${text || '(텍스트 없음)'}`,`요소: ${el.localName}`,`id: ${compact(el.id) || '(없음)'}`,`class: ${compact([...el.classList].join(' ')) || '(없음)'}`,`CSS: ${css}`);
+    const lines=[],add=(key,label,value)=>{if(copyFields[key])lines.push(`${label}: ${value()}`);};
+    add('pageUrl','페이지 URL',pageUrl);
+    add('documentTitle','문서 제목',()=>compact(document.title,200) || '(제목 없음)');
+    add('areaTitle','영역 제목',()=>areaTitle(el));
+    if(window!==window.top)add('frame','iframe',()=>`${location.origin}${location.pathname}`);
+    const name=(copyFields.elementName || copyFields.elementText || copyFields.rowText)?labelledBy(el) || compact(el.getAttribute('aria-label') || el.getAttribute('alt')):'';
+    const text=(copyFields.elementText || copyFields.rowText || copyFields.elementName)?visibleText(el) || name:'';
+    if(copyFields.rowText){
+      const row=el.closest('li,tr,[role="row"],[role="listitem"]');
+      if(row && (!copyFields.elementText || (row!==el && visibleText(row)!==text)))add('rowText','항목 텍스트',()=>visibleText(row) || '(텍스트 없음)');
+    }
+    if(name && (!copyFields.elementText || name!==text))add('elementName','요소 이름',()=>name);
+    add('elementText','요소 텍스트',()=>text || '(텍스트 없음)');
+    add('tag','요소',()=>el.localName);
+    add('id','id',()=>compact(el.id) || '(없음)');
+    add('class','class',()=>compact([...el.classList].join(' ')) || '(없음)');
+    add('css','CSS',()=>css);
     return lines.join('\n');
   }
   function mount() {
@@ -163,6 +177,7 @@
       if(!target) return;
       copying=true;
       const css=description(target),text=clipboardText(target,css);
+      if(!text){copying=false;tooltip.textContent='선택한 정보가 이 요소에 없습니다. 다른 요소를 선택하거나 복사 설정을 바꿔주세요.';place();return;}
       // Synchronous copy runs in the trusted user click and works on HTTP pages too.
       const previous=document.activeElement, selection=window.getSelection();
       const ranges=selection ? [...Array(selection.rangeCount)].map((_,i)=>selection.getRangeAt(i).cloneRange()) : [];

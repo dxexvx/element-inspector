@@ -43,6 +43,7 @@ const cssFrom=text=>text.split('\n').find(line=>line.startsWith('CSS: '))?.slice
     assert.ok(extensionId, 'Chrome must register the unpacked extension');
     const options = await context.newPage();
     await options.goto(`chrome-extension://${extensionId}/options.html`);
+    assert.equal(await options.locator('input[name=copy-field]').count(),11,'Each clipboard field must have its own toggle');
     await options.locator('#shortcut').press('Control+Shift+Y');
     await options.getByRole('button', {name:'저장',exact:true}).click();
     await options.getByRole('status').filter({hasText:'저장했습니다'}).waitFor();
@@ -157,7 +158,7 @@ const cssFrom=text=>text.split('\n').find(line=>line.startsWith('CSS: '))?.slice
     await page.keyboard.press('Escape');
     console.log('tablet checked');
     // Real popup route: the active page is queried through Chrome tabs, then receives the message.
-    const popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    let popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
     await popup.getByRole('button',{name:'검사 켜기·끄기'}).waitFor();
     await popup.screenshot({path:path.join(out,'implementation-popup.png')});
     await page.bringToFront();
@@ -195,6 +196,63 @@ const cssFrom=text=>text.split('\n').find(line=>line.startsWith('CSS: '))?.slice
     const urlCopy=await copyContext(target);
     assert.match(urlCopy,/group=54157#panel\?tab=ideas/);
     assert.doesNotMatch(urlCopy,/private-query|private-hash|api_key|access_token/);
+    // Each field is user-controlled; preserve the existing all-selected upgrade default.
+    assert.equal(await options.locator('input[name=copy-field]:checked').count(),11);
+    const choose=async keys=>{
+      await options.bringToFront();
+      for(const key of keys)await options.locator(`input[value="${key}"]`).check();
+      for(const box of await options.locator('input[name=copy-field]').all())if(!keys.includes(await box.inputValue()))await box.uncheck();
+      await options.getByRole('button',{name:'저장',exact:true}).click();
+      await options.getByRole('status').filter({hasText:'저장했습니다'}).waitFor();
+      await page.bringToFront();
+    };
+    await choose(['css']);
+    const cssOnly=await copyContext(target);
+    assert.equal(cssOnly,'CSS: #save\\:button','Disabled metadata must not leak into clipboard');
+    await options.reload();
+    await options.waitForFunction(()=>!document.querySelector('#copy-fields').disabled);
+    assert.equal(await options.locator('input[name=copy-field]:checked').count(),1);
+    assert.equal(await options.locator('input[value=css]').isChecked(),true);
+    await options.locator('input[value=css]').click();
+    assert.equal(await options.locator('input[value=css]').isChecked(),true,'Keep last selected field');
+    await options.getByRole('status').filter({hasText:'최소 1개'}).waitFor();
+    popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popup.locator('input[value=pageUrl]').check();
+    await popup.getByRole('status').filter({hasText:'복사할 정보를 저장했습니다'}).waitFor();
+    await page.bringToFront();
+    const twoFields=await copyContext(target);
+    assert.equal(twoFields.split('\n').length,2);
+    assert.match(twoFields,/^페이지 URL: .*\nCSS: #save/);
+    await popup.reload();
+    await popup.waitForFunction(()=>!document.querySelector('#copy-fields').disabled);
+    assert.equal(await popup.locator('input[name=copy-field]:checked').count(),2,'Popup toggles persist');
+    const fieldCopies={};
+    const expected={pageUrl:/^페이지 URL: http:/,documentTitle:/^문서 제목: 검사기 검증용 예시$/,areaTitle:/^영역 제목: 맥락 검증 영역$/,elementText:/^요소 텍스트: ★$/,rowText:/^항목 텍스트: 행 제목 ★$/,elementName:/^요소 이름: 아이콘 버튼$/,tag:/^요소: button$/,id:/^id: context-icon$/,class:/^class: \(없음\)$/,css:/^CSS: #context-icon$/};
+    for(const [key,pattern] of Object.entries(expected)){
+      await choose([key]);
+      const value=await copyContext(page.locator('#context-icon'));
+      assert.equal(value.split('\n').length,1,`${key}: only selected field is copied`);
+      assert.match(value,pattern);fieldCopies[key]=value;
+    }
+    await choose(['frame']);
+    const previousClipboard=await page.evaluate(()=>navigator.clipboard.readText());
+    await target.hover();await page.keyboard.press('Alt+Shift+E');await target.click();
+    await overlay.getByText('선택한 정보가 이 요소에 없습니다.',{exact:false}).waitFor();
+    assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),previousClipboard,'Unavailable context must not replace clipboard with empty text');
+    await page.keyboard.press('Escape');
+    fieldCopies.frame=await copyContext(child);
+    assert.equal(fieldCopies.frame,'iframe: '+new URL('/frame',url).href,'Same selection reaches already loaded iframe');
+    await choose(['css']);
+    await page.reload();
+    assert.equal(await copyContext(target),'CSS: #save\\:button','Saved selection survives content script reload');
+    await popup.reload();await popup.waitForFunction(()=>!document.querySelector('#copy-fields').disabled);
+    await popup.locator('input[value=css]').click();
+    assert.equal(await popup.locator('input[value=css]').isChecked(),true,'Popup also guards last field');
+    await popup.getByRole('status').filter({hasText:'최소 1개'}).waitFor();
+    await options.getByRole('button',{name:'기본값 복원'}).click();
+    assert.equal(await options.locator('input[name=copy-field]:checked').count(),11);
+    await options.getByRole('button',{name:'저장',exact:true}).click();
+    await options.getByRole('status').filter({hasText:'저장했습니다'}).waitFor();
     assert.deepEqual(errors,[]);
     const comparison=await context.newPage();
     for(const [kind,width,height] of [['desktop',1920,1080],['tablet',1024,768],['mobile',390,844]]) {
@@ -204,7 +262,7 @@ const cssFrom=text=>text.split('\n').find(line=>line.startsWith('CSS: '))?.slice
       await comparison.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(i=>i.decode())));
       await comparison.screenshot({path:path.join(out,'comparison-'+kind+'.png')});
     }
-    const receipt={passed:true,extensionId,clipboard:{copied,repeated,plain,contextCopy,longCopy,frameContext,urlCopy},errors,checks:30};
+    const receipt={passed:true,extensionId,clipboard:{copied,repeated,plain,contextCopy,longCopy,frameContext,urlCopy,cssOnly,twoFields,fieldCopies},errors,checks:30,fieldSelectionChecks:{independentFields:11,liveUpdate:true,persistence:true,lastFieldGuard:true,unavailableContext:true}};
     fs.writeFileSync(path.join(out,'receipt.json'),JSON.stringify(receipt,null,2));
     console.log(JSON.stringify(receipt));
   } finally {
