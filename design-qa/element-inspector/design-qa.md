@@ -28,4 +28,8 @@ P2: 프레임에도 검사 상태를 전파하면서 포인터가 없는 프레�
 
 증거는 외장 run에서 완료+24시간 보관 대상으로 등록하며, 영구 판단은 배정 실행기록과 이 보고서에 남긴다.
 
+## 1.1.0 후속 맥락 복사
+
+페이지/문서/영역/요소 맥락을 복사 페이로드에 추가했다. hover 강조·정보창·성공/실패 toast의 표시 형식은 변경하지 않아 위 시각 비교의 동일 입력 범위는 유지된다. 새 배포용 폴더를 실제 로드한 30개 행동검증 그룹이 통과했고 pageerror0이다. 새 receipt: `/Volumes/1TB_SK_NVME/Artifacts/AgentOps/VerificationEvidence/runs/EV-20261017T050717Z-ca20943ad09f/design-qa/element-inspector/receipt.json`. URL 민감 query/hash 제거·영역 heading/label·행/아이콘 이름·입력값 제외·긴 텍스트241자(말줄임 포함)·기존 CSS 해석을 확인했다. 프레임 간 늦은 상태 응답이 최신 조작을 덮지 않도록 requestId를 추가했다. 신규 화면 변경이 없어 별도 시각 재설계 loop는 적용하지 않았다.
+
 final result: passed

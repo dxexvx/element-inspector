@@ -17,7 +17,7 @@ unpacked = out / 'element-inspector'
 unpacked.mkdir(parents=True, exist_ok=True)
 for name in files:
     shutil.copy2(root / name, unpacked / name)
-archive = out / 'element-inspector-1.0.0.zip'
+archive = out / f"element-inspector-{manifest['version']}.zip"
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
     for name in files:
         info = zipfile.ZipInfo(name, date_time=(2026, 10, 17, 0, 0, 0))
