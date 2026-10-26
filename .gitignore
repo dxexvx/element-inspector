@@ -1,3 +1,15 @@
 node_modules/
 output/
 .DS_Store
+
+# Local agent skills and store-review working records are not installation source.
+.agents/
+CHROMEWEBSTORE.md
+store/*receipt.json
+store/verification.json
+store/submission.json
+store/review-readiness.md
+store/listing-ko.txt
+store/reviewer-instructions-en.txt
+store/branding/README.md
+store/branding/installed-management-icon.png

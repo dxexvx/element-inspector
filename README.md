@@ -2,14 +2,25 @@
 
 포인터로 웹페이지 요소를 강조하고 id·class를 확인한 뒤, 클릭하여 페이지·영역 맥락과 CSS 식별자를 함께 복사하는 Chrome Manifest V3 확장입니다. 복사한 식별자를 에이전트에게 붙여 수정 위치를 전달할 수 있습니다.
 
-## 설치
+## GitHub 주소 하나로 설치
 
-1. `npm run package`로 실행 폴더와 ZIP을 만듭니다. 빌드 도구나 서버는 필요하지 않습니다.
-2. Chrome의 `chrome://extensions`에서 **개발자 모드**를 켭니다.
-3. **압축해제된 확장 프로그램을 로드합니다**를 눌러 이 프로젝트의 `output/element-inspector` 폴더를 선택합니다. 이 프로젝트 루트도 직접 로드할 수 있습니다.
-4. 이미 열려 있던 웹페이지는 새로고침합니다.
+공유 주소: **https://github.com/dxexvx/element-inspector**
 
-로드 폴더: `/Users/devis/Yeo/Workspaces/Ychis/Code/devs/chrome-extensions/element-inspector/output/element-inspector`
+웹 스토어 계정·등록비·Node.js·Python 없이 설치할 수 있습니다. Chrome의 개발자 모드에서 직접 로드하는 방식입니다.
+
+1. [설치 파일 내려받기](https://github.com/dxexvx/element-inspector/archive/refs/heads/main.zip)를 누릅니다. 저장소의 **Code → Download ZIP**으로 받아도 됩니다.
+2. ZIP을 압축 해제하고 오래 유지할 위치에 둡니다. 예: `문서/Chrome확장/element-inspector`. 폴더 바로 안에 `manifest.json`이 있어야 합니다.
+3. Chrome 주소창에 `chrome://extensions`를 입력하고 **개발자 모드**를 켭니다.
+4. **압축해제된 확장 프로그램을 로드합니다**를 눌러 `manifest.json`이 있는 폴더를 선택합니다. ZIP 자체나 `icons` 폴더를 고르지 않습니다.
+5. 일반 웹페이지를 새로고침하고 **Alt + Shift + E**(macOS: **Option + Shift + E**)로 확인합니다.
+
+이 GitHub 주소가 자동 설치 링크는 아닙니다. Chrome의 위 두 보안 조작은 사용자가 직접 수행해야 합니다. 조직에서 관리하는 Chrome은 정책에 따라 개발자 모드 설치가 제한될 수 있습니다. 설치한 폴더를 지우거나 옮기면 확장이 작동하지 않을 수 있습니다.
+
+[설치·업데이트·문제 해결 안내](INSTALL.md) · [개인정보처리방침](store/privacy-policy.md)
+
+에이전트에게 주소만 전달하려면 다음처럼 요청하세요.
+
+> https://github.com/dxexvx/element-inspector 의 README와 INSTALL.md를 읽고 내 운영체제에 맞게 설치를 도와줘. 소스를 먼저 확인하고, 오래 유지할 폴더에 다운로드·압축 해제해줘. Chrome의 개발자 모드와 압축해제된 확장 로드는 내가 직접 선택할 수 있게 정확한 폴더를 알려줘. 로그인·결제·npm 설치는 필요 없어.
 
 ## 사용
 
@@ -19,7 +30,7 @@
 - 확장 메뉴 **단축키 설정**에서 입력 칸을 선택하고 조합키를 누른 뒤 **저장**합니다. Ctrl·Command·Alt 중 하나와 영문/숫자가 필요하고 Shift를 추가할 수 있습니다. 기존 탭에도 즉시 적용되며 브라우저를 다시 열어도 저장됩니다.
 - ID를 우선 사용하고 중복 ID/class 또는 식별자 없는 요소는 유일한 CSS 경로를 만듭니다. 특수문자는 CSS 방식으로 이스케이프합니다.
 - 열린 Shadow DOM은 `#host >>> #inside`처럼 경계를 표시합니다. `>>>`는 전달용 표기이며 하나의 `querySelector`에 넣는 표준 CSS가 아닙니다. 각 경계에서 `shadowRoot`로 들어가세요.
-- HTTP(S) iframe에서도 강조·복사가 작동하며 프레임 주소를 함께 표시합니다. 영역 제목은 가까운 heading·영역 이름을 우선 사용하며 찾지 못하면 `(제목 없음)`으로 표시합니다. 표시된 텍스트는 최대240자(영역 제목120자, 문서 제목200자)로 제한하며 입력·선택·편집칸의 값은 수집하지 않습니다. URL의 인증 관련 query/hash 인자는 제외합니다.
+- HTTP(S) iframe에서도 강조·복사가 작동하며 프레임 주소를 함께 표시합니다. 영역 제목은 가까운 heading·영역 이름을 우선 사용하며 찾지 못하면 `(제목 없음)`으로 표시합니다. 표시된 텍스트는 최대240자(영역 제목120자, 문서 제목200자)로 제한하며 입력·선택·편집칸의 값은 렌더링된 텍스트 추출에서 제외합니다. 알려진 인증 관련 URL 인자도 제외하지만, 화면 내용·URL 경로·요소 식별자에 민감정보가 남을 수 있어 붙여넣기 전에 확인하세요.
 
 ## 범위
 
@@ -43,9 +54,9 @@ npm run package
 
 공식 근거: [Chrome commands API](https://developer.chrome.com/docs/extensions/reference/api/commands), [Playwright의 실제 확장 로드](https://playwright.dev/docs/chrome-extensions). Chrome commands에는 조합키를 프로그램으로 수정하는 API가 없어 설정 화면의 페이지 키 이벤트 조합을 사용합니다.
 
-## 1.1.0 갱신
+## 업데이트
 
-기존 설치 폴더는 그대로입니다. `chrome://extensions`에서 **엘리먼트 검사기 새로고침**을 누른 뒤 검사할 웹페이지도 새로고침하세요. 설정한 단축키는 유지됩니다.
+기존 설치 폴더의 경로를 유지하세요. `chrome://extensions`에서 **엘리먼트 검사기 새로고침**을 누른 뒤 검사할 웹페이지도 새로고침하세요. 설정한 단축키는 유지됩니다.
 
 복사 예시:
 
