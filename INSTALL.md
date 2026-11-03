@@ -1,5 +1,7 @@
 # 엘리먼트 검사기 설치 안내
 
+새 배포 위치는 [chrome-browser/extensions/element-inspector](https://github.com/dxexvx/chrome-browser/tree/main/extensions/element-inspector)입니다. [통합 설치 안내](https://github.com/dxexvx/chrome-browser#3분-설치)를 먼저 확인하세요. 기존 설치의 로컬 경로는 유지해도 됩니다.
+
 이 문서와 코드는 https://github.com/dxexvx/element-inspector 에 있습니다. Windows·macOS·Linux의 일반 데스크톱 Chrome에서 압축해제된 확장으로 로드합니다. 모바일 Chrome 설치용이 아닙니다.
 
 ## 처음 설치

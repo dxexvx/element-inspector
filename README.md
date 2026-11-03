@@ -1,5 +1,7 @@
 # 엘리먼트 검사기
 
+> **통합 저장소로 이동했습니다:** [크롬브라우저 / 엘리먼트 검사기](https://github.com/dxexvx/chrome-browser/tree/main/extensions/element-inspector). 새 설치와 업데이트는 [통합 README](https://github.com/dxexvx/chrome-browser#readme)를 따르세요. 기존 설치 폴더와 이 저장소의 소스는 호환을 위해 유지합니다. 로컬 폴더를 옮기거나 삭제하지 마세요.
+
 포인터로 웹페이지 요소를 강조하고 id·class를 확인한 뒤, 클릭하여 페이지·영역 맥락과 CSS 식별자를 함께 복사하는 Chrome Manifest V3 확장입니다. 복사한 식별자를 에이전트에게 붙여 수정 위치를 전달할 수 있습니다.
 
 ## GitHub 주소 하나로 설치
