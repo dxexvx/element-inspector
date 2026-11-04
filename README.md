@@ -1,28 +1,27 @@
 # 엘리먼트 검사기
 
-> **통합 저장소로 이동했습니다:** [크롬브라우저 / 엘리먼트 검사기](https://github.com/dxexvx/chrome-browser/tree/main/extensions/element-inspector). 새 설치와 업데이트는 [통합 README](https://github.com/dxexvx/chrome-browser#readme)를 따르세요. 기존 설치 폴더와 이 저장소의 소스는 호환을 위해 유지합니다. 로컬 폴더를 옮기거나 삭제하지 마세요.
 
 포인터로 웹페이지 요소를 강조하고 id·class를 확인한 뒤, 클릭하여 페이지·영역 맥락과 CSS 식별자를 함께 복사하는 Chrome Manifest V3 확장입니다. 복사한 식별자를 에이전트에게 붙여 수정 위치를 전달할 수 있습니다.
 
-## GitHub 주소 하나로 설치
+이 저장소는 **element-inspector 전용**입니다. `chrome-browser`는 로컬 상위 폴더이며 Git 저장소가 아닙니다. [도메인 계정 로그인](https://github.com/dxexvx/domain-account-login)은 별도 저장소입니다.
 
-공유 주소: **https://github.com/dxexvx/element-inspector**
+## 설치
 
-웹 스토어 계정·등록비·Node.js·Python 없이 설치할 수 있습니다. Chrome의 개발자 모드에서 직접 로드하는 방식입니다.
+1. [소스 ZIP](https://github.com/dxexvx/element-inspector/archive/refs/heads/main.zip)을 받아 압축을 풉니다. Git 사용자는 아래 명령을 사용합니다.
+2. 폴더를 오래 유지할 위치에 둡니다. 예: `문서/chrome-browser/element-inspector`.
+3. Chrome의 `chrome://extensions` → **개발자 모드** → **압축해제된 확장 프로그램을 로드합니다**에서 **이 저장소 루트**를 선택합니다. 바로 안에 `manifest.json`이 있어야 합니다.
+4. 목록에서 **엘리먼트 검사기**와 버전을 확인하고 일반 웹페이지를 새로고침합니다. 설치에 Node.js·빌드·Web Store 계정은 필요하지 않습니다.
 
-1. [설치 파일 내려받기](https://github.com/dxexvx/element-inspector/archive/refs/heads/main.zip)를 누릅니다. 저장소의 **Code → Download ZIP**으로 받아도 됩니다.
-2. ZIP을 압축 해제하고 오래 유지할 위치에 둡니다. 예: `문서/Chrome확장/element-inspector`. 폴더 바로 안에 `manifest.json`이 있어야 합니다.
-3. Chrome 주소창에 `chrome://extensions`를 입력하고 **개발자 모드**를 켭니다.
-4. **압축해제된 확장 프로그램을 로드합니다**를 눌러 `manifest.json`이 있는 폴더를 선택합니다. ZIP 자체나 `icons` 폴더를 고르지 않습니다.
-5. 일반 웹페이지를 새로고침하고 **Alt + Shift + E**(macOS: **Option + Shift + E**)로 확인합니다.
+```sh
+mkdir -p "$HOME/chrome-browser"
+git clone https://github.com/dxexvx/element-inspector.git "$HOME/chrome-browser/element-inspector"
+```
 
-이 GitHub 주소가 자동 설치 링크는 아닙니다. Chrome의 위 두 보안 조작은 사용자가 직접 수행해야 합니다. 조직에서 관리하는 Chrome은 정책에 따라 개발자 모드 설치가 제한될 수 있습니다. 설치한 폴더를 지우거나 옮기면 확장이 작동하지 않을 수 있습니다.
+에이전트에게는 다음 요청을 전달하세요.
 
-[설치·업데이트·문제 해결 안내](INSTALL.md) · [개인정보처리방침](store/privacy-policy.md)
+> https://github.com/dxexvx/element-inspector 의 README와 INSTALL.md를 읽고 엘리먼트 검사기를 설치해줘. 기존 설치 경로와 설정은 보존하고, 새 설치는 chrome-browser/element-inspector 저장소 루트의 manifest.json을 확인해 Chrome에서 로드해줘. 실제 목록 이름·버전과 일반 웹페이지의 강조·복사·취소를 확인해줘.
 
-에이전트에게 주소만 전달하려면 다음처럼 요청하세요.
-
-> https://github.com/dxexvx/element-inspector 의 README와 INSTALL.md를 읽고 내 운영체제에 맞게 설치를 도와줘. 소스를 먼저 확인하고, 오래 유지할 폴더에 다운로드·압축 해제해줘. Chrome의 개발자 모드와 압축해제된 확장 로드는 내가 직접 선택할 수 있게 정확한 폴더를 알려줘. 로그인·결제·npm 설치는 필요 없어.
+[에이전트 설치·업데이트 안내](INSTALL.md) · [간단 사용 매뉴얼](MANUAL.md)
 
 ## 사용
 

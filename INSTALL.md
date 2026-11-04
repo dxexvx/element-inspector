@@ -1,14 +1,24 @@
 # 엘리먼트 검사기 설치 안내
 
-새 배포 위치는 [chrome-browser/extensions/element-inspector](https://github.com/dxexvx/chrome-browser/tree/main/extensions/element-inspector)입니다. [통합 설치 안내](https://github.com/dxexvx/chrome-browser#3분-설치)를 먼저 확인하세요. 기존 설치의 로컬 경로는 유지해도 됩니다.
+독립 저장소는 https://github.com/dxexvx/element-inspector 입니다. `chrome-browser`는 로컬 묶음 폴더 이름입니다. Chrome에서 로드할 폴더는 **이 저장소 루트**이며 manifest.json이 바로 안에 있습니다. 기존 설치 경로는 유지하세요. Windows·macOS·Linux의 일반 데스크톱 Chrome을 지원합니다.
 
-이 문서와 코드는 https://github.com/dxexvx/element-inspector 에 있습니다. Windows·macOS·Linux의 일반 데스크톱 Chrome에서 압축해제된 확장으로 로드합니다. 모바일 Chrome 설치용이 아닙니다.
+에이전트가 Git으로 준비할 때는 대상 폴더가 없고 기존 설치가 없는지 먼저 확인합니다.
+
+```sh
+mkdir -p "$HOME/chrome-browser"
+git clone https://github.com/dxexvx/element-inspector.git "$HOME/chrome-browser/element-inspector"
+cd "$HOME/chrome-browser/element-inspector"
+git rev-parse HEAD
+python3 -c 'from pathlib import Path; import json; p=Path.cwd(); m=json.loads((p/"manifest.json").read_text()); assert m["manifest_version"]==3; print(p); print(m["name"],m["version"])'
+```
+
+Windows PowerShell은 `git clone https://github.com/dxexvx/element-inspector.git "$HOME\chrome-browser\element-inspector"`를 사용합니다. 설치에는 Python이나 npm이 필요 없으며 위 Python은 manifest 확인용입니다.
 
 ## 처음 설치
 
 1. 저장소의 **Code → Download ZIP**을 누릅니다. [main ZIP 바로 받기](https://github.com/dxexvx/element-inspector/archive/refs/heads/main.zip)도 가능합니다.
 2. Windows는 ZIP 오른쪽 클릭 → **압축 풀기**, macOS는 ZIP 더블 클릭, Linux는 압축 관리자의 풀기 기능을 사용합니다.
-3. 압축을 푼 `element-inspector-main` 폴더를 오래 유지할 위치로 옮깁니다. 예: `문서/Chrome확장/element-inspector`. 다운로드 폴더의 자동 정리 대상에 두지 않는 편이 좋습니다.
+3. 압축을 푼 `element-inspector-main` 폴더를 오래 유지할 위치로 옮깁니다. 예: `문서/chrome-browser/element-inspector`. 다운로드 폴더의 자동 정리 대상에 두지 않는 편이 좋습니다.
 4. 그 폴더 바로 안에 `manifest.json`, `content.js`, `background.js`, `shared.js`, `popup.html`, `options.html`, `icons`가 있는지 확인합니다. 소스가 이미 실행 가능한 형태여서 빌드·npm 설치·서버가 필요하지 않습니다.
 5. Chrome에서 `chrome://extensions`를 엽니다. 오른쪽 위 **개발자 모드**를 켭니다.
 6. **압축해제된 확장 프로그램을 로드합니다**를 누르고 **manifest.json이 바로 들어 있는 폴더**를 선택합니다. 파일 자체나 ZIP, 한 단계 위 폴더는 고르지 않습니다.
@@ -42,7 +52,7 @@ Chrome 웹 스토어·chrome:// 내부 화면·PDF 뷰어 등 제한 화면에�
 - 이 저장소의 README와 manifest, 실행 JS를 먼저 확인합니다. 토큰·계정 로그인·결제·관리자 권한은 설치에 필요하지 않습니다.
 - GitHub 공개 ZIP을 사용자가 유지할 명시적인 폴더에 풀고 manifest 위치와 실제 버전을 확인합니다. 기존 설치가 있으면 경로/버전을 먼저 확인하고 사용자 파일을 덮어쓰거나 설정을 지우지 않습니다.
 - 원격 스크립트를 곧바로 실행하는 curl 파이프·sudo·사용자 Chrome 프로필 파일 수정·보안 정책 변경으로 무인 설치를 흉내내지 않습니다.
-- Chrome에서 개발자 모드와 정확한 로드 폴더를 안내합니다. URL 전달이나 파일 다운로드만으로 설치가 완료됐다고 보고하지 않습니다.
-- 사용자가 로드한 뒤 일반 웹페이지에서 실제 강조·복사·취소를 확인합니다. 확인할 수 없는 단계는 미검증으로 남깁니다.
+- 사용 가능한 브라우저 UI 도구로 Chrome에서 개발자 모드와 정확한 로드 폴더를 선택합니다. 실행 직전 확인 규칙은 따릅니다. UI 도구가 없거나 관리 정책으로 불가능한 정확한 단계만 사용자에게 안내합니다. URL 전달이나 파일 다운로드만으로 설치가 완료됐다고 보고하지 않습니다.
+- 로드 완료 후 일반 웹페이지에서 실제 강조·복사·취소를 확인합니다. 확인할 수 없는 단계는 미검증으로 남깁니다.
 
 공식 설치 절차: [Chrome 개발 문서](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).

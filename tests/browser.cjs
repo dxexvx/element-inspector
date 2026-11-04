@@ -178,7 +178,18 @@ const cssFrom=text=>text.split('\n').find(line=>line.startsWith('CSS: '))?.slice
       document.body.append(section);
       const unrelated=document.createElement('section');unrelated.innerHTML='<h2>뒤쪽의 무관한 제목</h2>';document.body.append(unrelated);
     });
-    const copyContext=async locator=>{await locator.hover();await page.keyboard.press('Alt+Shift+E');await locator.click();return page.evaluate(()=>navigator.clipboard.readText());};
+    const copyContext=async locator=>{
+      // A frame/input can retain keyboard focus after copying. Focus the fixture's
+      // heading before the shortcut, and wait for this copy instead of stale text.
+      await page.locator('h1').click();
+      await locator.hover();
+      await page.keyboard.press('Alt+Shift+E');
+      const copyOverlay=locator===child?page.frameLocator('iframe').locator('devis-element-inspector'):overlay;
+      await copyOverlay.locator('[data-highlight]').waitFor({state:'visible'});
+      await locator.click();
+      await copyOverlay.getByText('복사했습니다',{exact:false}).waitFor();
+      return page.evaluate(()=>navigator.clipboard.readText());
+    };
     const contextCopy=await copyContext(page.locator('#context-icon'));
     assert.match(contextCopy,/영역 제목: 맥락 검증 영역/);
     assert.match(contextCopy,/항목 텍스트: 행 제목 ★/);
