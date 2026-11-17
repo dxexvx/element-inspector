@@ -46,18 +46,23 @@ async function configureConnection(message){
   let stored;
   try{
     stored=await readConnection();
+    const saved={saved:Boolean(stored),savedProject:stored?.project || ''};
     if(message.type==='element-inspector:disconnect'){
-      await ElementInspectorConnectionStore.clear();await chrome.storage.session.remove('picklogConnection');return {ok:true,saved:false,connected:false};
+      await ElementInspectorConnectionStore.clear();await chrome.storage.session.remove('picklogConnection');return {ok:true,saved:false,savedProject:'',connected:false};
     }
-    if(message.type==='element-inspector:connection' && (!stored || !message.verify))return {ok:true,saved:Boolean(stored),connected:false,project:stored?.project || '',checkedAt:stored?.checkedAt};
-    const token=message.type==='element-inspector:connect'?(message.token || stored?.token):stored?.token;
-    const project=(message.type==='element-inspector:connect'?message.project:stored?.project)?.trim().toUpperCase();
+    if(message.type==='element-inspector:connection' && (!stored || !message.verify))return {ok:true,...saved,connected:false,project:stored?.project || ''};
+    const draft=message.type!=='element-inspector:connection';
+    const token=draft?(message.token || stored?.token):stored?.token;
+    const project=(draft?message.project:stored?.project)?.trim().toUpperCase();
     if(!ElementInspectorCapture.validToken(token) || !ElementInspectorCapture.validProject(project))throw Error('invalid_connection');
+    if(message.type==='element-inspector:save-connection'){
+      await ElementInspectorConnectionStore.write({token,project});
+      return {ok:true,saved:true,savedProject:project,connected:false,project};
+    }
     if(!await chrome.permissions.contains({origins:['https://picklog.devislife.com/*']}))throw Error('host_permission');
     const verification=await ElementInspectorCapture.connect(token,project),checkedAt=new Date().toISOString();
-    await ElementInspectorConnectionStore.write({token,project,checkedAt,projectVerified:verification.projectVerified});
-    return {ok:true,saved:true,connected:true,project,checkedAt,projectVerified:verification.projectVerified};
-  }catch(error){return {ok:false,saved:Boolean(stored),connected:false,project:stored?.project || '',error:connectionError(error)};}
+    return {ok:true,...saved,connected:true,project,checkedAt,projectVerified:verification.projectVerified};
+  }catch(error){return {ok:false,saved:Boolean(stored),savedProject:stored?.project || '',connected:false,error:connectionError(error)};}
 }
 function captureError(code){
   return ({auth:'Picklog PAT를 확인하고 고급 설정에서 다시 연결하세요.',forbidden:'Picklog 캔버스·프로젝트의 읽기/쓰기 권한을 확인하세요.',rate_limit:'요청이 많습니다. 잠시 뒤 다시 캡처하세요.',upload_unverified:'업로드 결과를 확인하지 못했습니다. 중복 업로드 전에 Picklog 캔버스를 확인하세요.',frame:'프레임 안 요소는 이미지 캡처를 지원하지 않습니다. 요소 정보는 복사했습니다.',expired:'복사할 이미지의 보관 시간이 끝났습니다. 요소를 다시 캡처하세요.',permission:'설정에서 요소 캡처를 켜고 Chrome 권한을 허용하세요.',tab_changed:'검사하던 탭이 바뀌었습니다. 원래 화면에서 다시 캡처하세요.',busy:'이전 캡처가 끝난 뒤 다시 시도하세요.',invalid_connection:'PAT와 저장 프로젝트 키를 확인하세요.'})[code] || '캡처 또는 업로드를 마치지 못했습니다. 요소 정보는 복사했습니다. Picklog 캔버스를 확인한 뒤 다시 시도하세요.';
@@ -67,7 +72,7 @@ chrome.tabs.onRemoved.addListener(id=>clipboardResults.delete(id));
 chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status==='loading')clipboardResults.delete(id);});
 const optionsSender=sender=>sender.id===chrome.runtime.id && sender.url===chrome.runtime.getURL('options.html');
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-  if(!['element-inspector:connection','element-inspector:connect','element-inspector:disconnect','element-inspector:capture','element-inspector:open-preview','element-inspector:preview'].includes(message?.type))return;
+  if(!['element-inspector:connection','element-inspector:test-connection','element-inspector:save-connection','element-inspector:disconnect','element-inspector:capture','element-inspector:open-preview','element-inspector:preview'].includes(message?.type))return;
   (async()=>{
     await sessionReady;
     if(message.type==='element-inspector:preview'){
