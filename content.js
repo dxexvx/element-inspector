@@ -1,12 +1,13 @@
 (() => {
   const {defaults,valid,matches,normalizeFields}=ElementInspectorSettings;
-  let copyFields=normalizeFields();
+  let copyFields=normalizeFields(),captureEnabled=false,captureGeneration=0,pendingCapture=null;
   let shortcut=defaults, active=false, host, shadow, highlight, tooltip, target, pointer, frame, toastTimer, copying=false, pendingRequest=null;
-  chrome.storage.local.get(['shortcut','copyFields']).then(data=>{if(valid(data.shortcut)) shortcut=data.shortcut;copyFields=normalizeFields(data.copyFields);}).catch(()=>{});
+  chrome.storage.local.get(['shortcut','copyFields','captureEnabled']).then(data=>{if(valid(data.shortcut)) shortcut=data.shortcut;copyFields=normalizeFields(data.copyFields);captureEnabled=Boolean(data.captureEnabled);}).catch(()=>{});
   chrome.storage.onChanged.addListener((changes,area)=>{
     if(area!=='local')return;
     if(changes.shortcut)shortcut=valid(changes.shortcut.newValue)?changes.shortcut.newValue:defaults;
     if(changes.copyFields)copyFields=normalizeFields(changes.copyFields.newValue);
+    if(changes.captureEnabled)captureEnabled=Boolean(changes.captureEnabled.newValue);
   });
   function selector(el) {
     const root=el.getRootNode();
@@ -158,10 +159,10 @@
     chrome.runtime.sendMessage({type:'element-inspector:toggle',active:value,requestId})
       .catch(()=>{}).finally(()=>{if(pendingRequest===requestId)pendingRequest=null;});
   }
-  function toggle(){const next=!active;setActive(next);sendState(next);}
+  function toggle(){captureGeneration++;pendingCapture=null;const next=!active;setActive(next);sendState(next);}
   function editable(e){return e.composedPath().some(n=>n instanceof Element && (n.matches('input,textarea,select') || n.isContentEditable));}
   window.addEventListener('keydown',e=>{
-    if((active || host) && e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();stop();sendState(false);return;}
+    if((active || host) && e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();captureGeneration++;pendingCapture=null;stop();sendState(false);return;}
     if(matches(e,shortcut) && (active || !editable(e))){e.preventDefault();e.stopImmediatePropagation();toggle();}
   },true);
   window.addEventListener('pointermove',e=>{pointer={x:e.clientX,y:e.clientY};schedule();},true);
@@ -178,20 +179,60 @@
       copying=true;
       const css=description(target),text=clipboardText(target,css);
       if(!text){copying=false;tooltip.textContent='선택한 정보가 이 요소에 없습니다. 다른 요소를 선택하거나 복사 설정을 바꿔주세요.';place();return;}
-      // Synchronous copy runs in the trusted user click and works on HTTP pages too.
-      const previous=document.activeElement, selection=window.getSelection();
-      const ranges=selection ? [...Array(selection.rangeCount)].map((_,i)=>selection.getRangeAt(i).cloneRange()) : [];
-      const input=document.createElement('textarea');input.value=text;input.style.cssText='position:fixed;left:-9999px;top:0';
-      shadow.append(input);input.focus({preventScroll:true});input.select();
-      let copied=false;try{copied=document.execCommand('copy');}catch{}
-      input.remove();previous?.focus?.({preventScroll:true});
-      try{selection?.removeAllRanges();ranges.forEach(r=>selection.addRange(r));}catch{}
+      const selectedElement=target,generation=++captureGeneration;
+      const copied=writeClipboard(text);
       copying=false;
-      if(copied){sendState(false);stop(false);highlight.hidden=true;tooltip.textContent=`복사했습니다\n${css}`;place();toastTimer=setTimeout(()=>stop(),1800);}
-      else {tooltip.textContent=`복사하지 못했습니다. 브라우저의 클립보드 권한을 확인하고 다시 클릭하세요.\n${css}`;place();}
+      if(copied){
+        sendState(false);stop(false);highlight.hidden=true;
+        tooltip.textContent=`복사했습니다\n${css}`;place();
+        if(captureEnabled)void captureElement(selectedElement,text,css,generation);
+        else toastTimer=setTimeout(()=>stop(),1800);
+      }else{tooltip.textContent=`복사하지 못했습니다. 브라우저의 클립보드 권한을 확인하고 다시 클릭하세요.\n${css}`;place();}
+
     },true);
   }
+  function writeClipboard(text){
+    const previous=document.activeElement,selection=window.getSelection();
+    const ranges=selection?[...Array(selection.rangeCount)].map((_,i)=>selection.getRangeAt(i).cloneRange()):[];
+    const input=document.createElement('textarea');input.value=text;input.style.cssText='position:fixed;left:-9999px;top:0';
+    shadow.append(input);input.focus({preventScroll:true});input.select();
+    let copied=false;try{copied=document.execCommand('copy');}catch{}
+    input.remove();previous?.focus?.({preventScroll:true});
+    try{selection?.removeAllRanges();ranges.forEach(r=>selection.addRange(r));}catch{}
+    return copied;
+  }
+  function captureGeometry(el){
+    const r=el.getBoundingClientRect();
+    return {rect:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY,scale:visualViewport?.scale || 1}};
+  }
+  async function captureElement(el,text,css,generation){
+    pendingCapture={el,generation};
+    host.style.setProperty('visibility','hidden','important');
+    // Let Chrome paint without inspector highlights before capturing the tab.
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    if(generation!==captureGeneration || !host)return;
+    const geometry=captureGeometry(el);
+    let result;
+    try{result=await chrome.runtime.sendMessage({type:'element-inspector:capture',...geometry,generation,text});}
+    catch{result={ok:false,error:'캡처를 마치지 못했습니다. 페이지를 새로고침하고 다시 시도하세요.'};}
+    if(generation!==captureGeneration || !host)return;
+    pendingCapture=null;host.style.visibility='';
+    if(result?.ok){
+      const combined=text+(result.publicId?`\nPicklog 캔버스 ID: ${result.publicId}\nPicklog 캔버스: ${result.url}`:'');
+      const copied=result.publicId && document.hasFocus() && writeClipboard(combined);
+      tooltip.textContent=result.publicId?(copied?`캡처를 업로드하고 참조 ID를 복사했습니다\n${result.publicId}`:`캡처를 업로드했습니다\n${result.publicId}`):`이미지를 캡처했습니다\n${result.width} × ${result.height}px`;
+      const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;margin-top:8px;pointer-events:auto';
+      const button=document.createElement('button');button.type='button';button.textContent='이미지 보기·복사';
+      const style='pointer-events:auto;min-height:36px;padding:6px 10px;color:#16243a;background:white;border:0;border-radius:3px;cursor:pointer;font:13px system-ui';button.style.cssText=style;
+      button.addEventListener('click',async()=>{try{const opened=await chrome.runtime.sendMessage({type:'element-inspector:open-preview',handle:result.handle});if(!opened?.ok)button.textContent=opened?.error || '요소를 다시 캡처하세요.';}catch{button.textContent='요소를 다시 캡처하세요.';}});actions.append(button);
+      if(result.publicId){const copy=document.createElement('button');copy.type='button';copy.textContent='참조 포함 다시 복사';copy.style.cssText=style;copy.addEventListener('click',()=>{copy.textContent=writeClipboard(combined)?'복사했습니다':'다시 시도해주세요';});actions.append(copy);}
+      tooltip.append(actions);
+    }else tooltip.textContent=result?.error || '캡처를 마치지 못했습니다. 요소 정보는 복사했습니다.';
+    place();toastTimer=setTimeout(()=>stop(),12000);
+  }
   chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+    if(message.type==='element-inspector:capture-progress'){if(pendingCapture?.generation===message.generation && host){host.style.visibility='';tooltip.textContent='이미지를 저장하고 있습니다…';place();}reply({ok:true});return;}
+    if(message.type==='element-inspector:validate-capture'){reply({valid:Boolean(pendingCapture?.el?.isConnected && pendingCapture.generation===message.generation),...(pendingCapture?captureGeometry(pendingCapture.el):{})});return;}
     if(message.type==='element-inspector:set'){if(!pendingRequest || message.requestId===pendingRequest)setActive(message.active);reply({active});}
   });
 })();

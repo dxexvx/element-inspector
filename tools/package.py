@@ -7,10 +7,11 @@ import struct
 import zipfile
 
 root = Path(__file__).resolve().parents[1]
-files = ['manifest.json', 'background.js', 'shared.js', 'content.js', 'popup.html', 'popup.js', 'options.html', 'options.js', 'ui.css']
+files = ['manifest.json', 'background.js', 'capture.js', 'capture-preview.html', 'capture-preview.js', 'shared.js', 'content.js', 'popup.html', 'popup.js', 'options.html', 'options.js', 'ui.css']
 manifest = json.loads((root / 'manifest.json').read_text())
 assert manifest['manifest_version'] == 3
 assert set(manifest['permissions']) == {'storage', 'clipboardWrite'}
+assert manifest['optional_host_permissions'] == ['<all_urls>']
 assert manifest['version'] == json.loads((root / 'package.json').read_text())['version']
 icons = manifest.get('icons', {})
 assert set(icons) == {'16', '32', '48', '128'}
