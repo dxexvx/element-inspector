@@ -21,12 +21,44 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
 chrome.tabs.onUpdated.addListener((id,change)=>{if(change.status==='loading')chrome.storage.session.remove('tab:'+id).catch(()=>{});});
 chrome.tabs.onRemoved.addListener(id=>chrome.storage.session.remove('tab:'+id).catch(()=>{}));
 
-// PATs stay in trusted extension session memory; never reply with credentials.
-importScripts('capture.js');
+// PATs stay in extension-origin persistent storage; replies contain status only.
+importScripts('capture.js','connection-store.js');
 const captureJobs=new Set(),windowEpochs=new Map();
 let nextCaptureAt=0;
 chrome.tabs.onActivated.addListener(info=>windowEpochs.set(info.windowId,(windowEpochs.get(info.windowId)||0)+1));
 const sessionReady=chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
+let connectionQueue=Promise.resolve();
+function connectionTask(task){const result=connectionQueue.then(task,task);connectionQueue=result.catch(()=>{});return result;}
+async function readConnection(){
+  const stored=await ElementInspectorConnectionStore.read();
+  const legacy=(await chrome.storage.session.get('picklogConnection')).picklogConnection;
+  if(stored){if(legacy)await chrome.storage.session.remove('picklogConnection');return stored;}
+  if(legacy && ElementInspectorCapture.validToken(legacy.token) && ElementInspectorCapture.validProject(legacy.project)){
+    const migrated={token:legacy.token,project:legacy.project.toUpperCase()};
+    await ElementInspectorConnectionStore.write(migrated);await chrome.storage.session.remove('picklogConnection');return migrated;
+  }
+  return null;
+}
+function connectionError(error){
+  return ({auth:'PAT 인증에 실패했습니다. 토큰의 유효기간과 캔버스 접근 권한을 확인하세요.',forbidden:'Picklog 캔버스 읽기 권한을 확인하세요.',project:'접근 가능한 프로젝트에 없습니다. 프로젝트 키와 접근 권한을 확인하세요.',host_permission:'Picklog 사이트 접근 권한이 허용되지 않았습니다. 다시 연결해 권한을 허용하세요.',storage:'PAT를 이 브라우저에 저장하지 못했습니다. 저장 공간을 확인하고 다시 시도하세요.',invalid_connection:'PAT와 프로젝트 키를 입력해주세요.',rate_limit:'요청이 많습니다. 잠시 뒤 다시 연결을 확인하세요.',invalid_response:'Picklog 응답을 확인하지 못했습니다. 잠시 뒤 다시 확인하세요.'})[error.message] || 'Picklog에 접속하지 못했습니다. 네트워크를 확인한 뒤 다시 연결을 확인하세요.';
+}
+async function configureConnection(message){
+  let stored;
+  try{
+    stored=await readConnection();
+    if(message.type==='element-inspector:disconnect'){
+      await ElementInspectorConnectionStore.clear();await chrome.storage.session.remove('picklogConnection');return {ok:true,saved:false,connected:false};
+    }
+    if(message.type==='element-inspector:connection' && (!stored || !message.verify))return {ok:true,saved:Boolean(stored),connected:false,project:stored?.project || '',checkedAt:stored?.checkedAt};
+    const token=message.type==='element-inspector:connect'?(message.token || stored?.token):stored?.token;
+    const project=(message.type==='element-inspector:connect'?message.project:stored?.project)?.trim().toUpperCase();
+    if(!ElementInspectorCapture.validToken(token) || !ElementInspectorCapture.validProject(project))throw Error('invalid_connection');
+    if(!await chrome.permissions.contains({origins:['https://picklog.devislife.com/*']}))throw Error('host_permission');
+    const verification=await ElementInspectorCapture.connect(token,project),checkedAt=new Date().toISOString();
+    await ElementInspectorConnectionStore.write({token,project,checkedAt,projectVerified:verification.projectVerified});
+    return {ok:true,saved:true,connected:true,project,checkedAt,projectVerified:verification.projectVerified};
+  }catch(error){return {ok:false,saved:Boolean(stored),connected:false,project:stored?.project || '',error:connectionError(error)};}
+}
 function captureError(code){
   return ({auth:'Picklog PAT를 확인하고 고급 설정에서 다시 연결하세요.',forbidden:'Picklog 캔버스·프로젝트의 읽기/쓰기 권한을 확인하세요.',rate_limit:'요청이 많습니다. 잠시 뒤 다시 캡처하세요.',upload_unverified:'업로드 결과를 확인하지 못했습니다. 중복 업로드 전에 Picklog 캔버스를 확인하세요.',frame:'프레임 안 요소는 이미지 캡처를 지원하지 않습니다. 요소 정보는 복사했습니다.',expired:'복사할 이미지의 보관 시간이 끝났습니다. 요소를 다시 캡처하세요.',permission:'설정에서 요소 캡처를 켜고 Chrome 권한을 허용하세요.',tab_changed:'검사하던 탭이 바뀌었습니다. 원래 화면에서 다시 캡처하세요.',busy:'이전 캡처가 끝난 뒤 다시 시도하세요.',invalid_connection:'PAT와 저장 프로젝트 키를 확인하세요.'})[code] || '캡처 또는 업로드를 마치지 못했습니다. 요소 정보는 복사했습니다. Picklog 캔버스를 확인한 뒤 다시 시도하세요.';
 }
@@ -45,15 +77,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     }
     if(!['element-inspector:capture','element-inspector:open-preview','element-inspector:preview'].includes(message.type)){
       if(!optionsSender(sender))throw Error('permission');
-      if(message.type==='element-inspector:disconnect'){await chrome.storage.session.remove('picklogConnection');return {ok:true,connected:false};}
-      if(message.type==='element-inspector:connect'){
-        const granted=await chrome.permissions.contains({origins:['<all_urls>']});
-        if(!granted)throw Error('permission');
-        await ElementInspectorCapture.connect(message.token,message.project);
-        await chrome.storage.session.set({picklogConnection:{token:message.token,project:message.project}});
-      }
-      const data=await chrome.storage.session.get('picklogConnection');
-      return {ok:true,connected:Boolean(data.picklogConnection),project:data.picklogConnection?.project || ''};
+      return connectionTask(()=>configureConnection(message));
     }
     if(sender.id!==chrome.runtime.id || !sender.tab || !/^https?:/.test(sender.url || ''))throw Error('permission');
     if(sender.frameId!==0)throw Error('frame');
@@ -86,7 +110,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       }finally{bitmap.close();}
       if(blob.size>16*1024*1024)throw Error('invalid_region');
       await chrome.tabs.sendMessage(tabId,{type:'element-inspector:capture-progress',generation:message.generation},{documentId:sender.documentId}).catch(()=>{});
-      const connection=(await chrome.storage.session.get('picklogConnection')).picklogConnection;
+      const connection=await readConnection();
       let reference=null;
       if(connection)reference=await ElementInspectorCapture.upload(blob,region,connection.token,connection.project);
       const text=message.text+(reference?`\nPicklog 캔버스 ID: ${reference.publicId}\nPicklog 캔버스: ${reference.url}`:'');

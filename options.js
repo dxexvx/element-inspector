@@ -17,7 +17,8 @@ input.addEventListener('keydown',e=>{
 });
 document.querySelector('form').addEventListener('submit',async e=>{
   e.preventDefault();if(fields.disabled)return;
-  try{await chrome.storage.local.set({shortcut,copyFields:readFields(fields),captureEnabled:document.querySelector('#capture-enabled').checked});status.textContent='저장했습니다. 열려 있는 웹페이지에도 적용됩니다.';}
+  const connectionAttempt=(pat.value.trim() || (savedConnection && project.value.trim().toUpperCase()!==savedProject))?connectPicklog():null;
+  try{await chrome.storage.local.set({shortcut,copyFields:readFields(fields),captureEnabled:document.querySelector('#capture-enabled').checked});const connected=connectionAttempt?await connectionAttempt:true;status.textContent=connected?'저장했습니다. Picklog 연결 결과는 연결 상태에서 확인하세요.':'기본 설정만 저장했습니다. Picklog 연결 실패 원인을 확인하세요.';}
   catch{status.textContent='저장하지 못했습니다. 다시 시도해주세요.';}
 });
 document.querySelector('#reset').addEventListener('click',()=>{document.querySelector('#capture-enabled').checked=false;shortcut={...defaults};show();showFields(fields);status.textContent='기본값입니다. 저장을 눌러 적용하세요.';});
@@ -28,19 +29,33 @@ captureEnabled.addEventListener('change',async()=>{
   try{if(!await chrome.permissions.request({origins:['<all_urls>']})){captureEnabled.checked=false;status.textContent='권한을 허용하지 않아 기존 정보만 복사합니다.';}}
   catch{captureEnabled.checked=false;status.textContent='캡처 권한을 요청하지 못했습니다. 다시 켜주세요.';}
 });
+let savedConnection=false,savedProject='';
+const connectionSummary=document.querySelector('#picklog-summary');
 function connectionState(result){
-  if(!result?.ok){connectionStatus.textContent=result?.error || '연결 상태를 읽지 못했습니다.';return;}
-  disconnectButton.hidden=!result.connected;
-  connectionStatus.textContent=result.connected?`Picklog에 연결했습니다. 저장 프로젝트: ${result.project}`:'Picklog 연결 없음 · 이미지를 클립보드에 복사합니다.';
+  savedConnection=Boolean(result?.saved);savedProject=result?.project || savedProject;
+  disconnectButton.hidden=!savedConnection;
+  pat.placeholder=savedConnection?'저장된 PAT 유지 · 바꾸려면 새 토큰 입력':'';
+  if(result?.ok && result.project)project.value=result.project;
+  let text;
+  if(!result?.ok)text=`연결 확인 실패 · ${result?.error || '잠시 뒤 다시 시도하세요.'}${savedConnection?' 기존 저장된 PAT는 유지됩니다.':''}`;
+  else if(result.connected){const when=new Date(result.checkedAt).toLocaleString('ko-KR');text=`${result.projectVerified?'인증·프로젝트 확인 완료':'PAT 인증 확인 완료 · 프로젝트는 업로드 시 확인'} · ${result.project} · ${when}`;}
+  else text=savedConnection?`PAT 저장됨 · ${savedProject} · 연결 확인이 필요합니다.`:'저장된 연결 없음 · 캡처 이미지는 미리보기에서 복사합니다.';
+  connectionStatus.textContent=text;
+  connectionSummary.dataset.state=result?.ok?(result.connected?'verified':'unverified'):'error';
 }
-chrome.runtime.sendMessage({type:'element-inspector:connection'}).then(connectionState).catch(()=>{connectionStatus.textContent='연결 상태를 읽지 못했습니다.';});
-connectButton.addEventListener('click',async()=>{
-  connectButton.disabled=true;connectionStatus.textContent='Picklog 인증을 확인하고 있습니다…';
+function connectionBusy(busy){connectButton.disabled=busy;disconnectButton.disabled=busy;}
+connectionBusy(true);
+chrome.runtime.sendMessage({type:'element-inspector:connection',verify:true}).then(connectionState).catch(()=>connectionState({ok:false,error:'연결 상태를 읽지 못했습니다.'})).finally(()=>connectionBusy(false));
+async function connectPicklog(){
+  connectionBusy(true);connectionStatus.textContent='Picklog 인증·프로젝트를 확인하고 있습니다…';
   try{
+    if(!await chrome.permissions.request({origins:['https://picklog.devislife.com/*']})){connectionState({ok:false,saved:savedConnection,error:'Picklog 사이트 접근 권한을 허용해주세요.'});return false;}
     const result=await chrome.runtime.sendMessage({type:'element-inspector:connect',token:pat.value.trim(),project:project.value.trim()});
-    pat.value='';connectionState(result);
-    if(result.ok)await chrome.storage.local.set({picklogProject:result.project});
-  }catch{pat.value='';connectionStatus.textContent='연결하지 못했습니다. PAT와 프로젝트 권한을 확인하세요.';}
-  finally{connectButton.disabled=false;}
-});
-disconnectButton.addEventListener('click',async()=>{pat.value='';try{connectionState(await chrome.runtime.sendMessage({type:'element-inspector:disconnect'}));}catch{connectionStatus.textContent='연결을 해제하지 못했습니다. 다시 시도해주세요.';}});
+    connectionState(result);
+    if(result.ok){pat.value='';await chrome.storage.local.set({picklogProject:result.project});}
+    return Boolean(result.ok);
+  }catch{connectionState({ok:false,saved:savedConnection,error:'네트워크를 확인하고 다시 시도하세요.'});return false;}
+  finally{connectionBusy(false);}
+}
+connectButton.addEventListener('click',connectPicklog);
+disconnectButton.addEventListener('click',async()=>{connectionBusy(true);try{const result=await chrome.runtime.sendMessage({type:'element-inspector:disconnect'});if(result.ok)pat.value='';connectionState(result);}catch{connectionState({ok:false,saved:savedConnection,error:'연결을 해제하지 못했습니다. 다시 시도해주세요.'});}finally{connectionBusy(false);}});

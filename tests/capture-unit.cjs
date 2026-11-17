@@ -26,3 +26,10 @@ test('auth denial, forged ID, project mismatch, changed image and uncertain POST
  assert.ok(count<=2);if(mode!=='changed')assert.equal(count,1);
  }
 });
+test('connection checks actual authentication and project access without an upload',async()=>{
+ let calls=[];const c=api(async url=>{calls.push(url);return Response.json(url.endsWith('/api/captures')?{images:[]}:{projects:[{project_key:'DEV'}]});});
+ assert.equal((await c.connect('synthetic-pat','DEV')).projectVerified,true);assert.equal(calls.length,2);assert.ok(calls.every(url=>url.startsWith('https://picklog.devislife.com/api/')));
+ await assert.rejects(c.connect('synthetic-pat','MISSING'),/project/);
+ const denied=api(async url=>url.endsWith('/api/captures')?Response.json({images:[]}):new Response('',{status:403}));assert.equal((await denied.connect('synthetic-pat','DEV')).projectVerified,false);
+ const expired=api(async()=>new Response('',{status:401}));await assert.rejects(expired.connect('synthetic-pat','DEV'),/auth/);
+});

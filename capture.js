@@ -14,7 +14,7 @@
   }
   async function request(path,token,init={},limit=4*1024*1024){
     const response=await fetch(origin+path,{...init,credentials:'omit',redirect:'error',cache:'no-store',headers:{Accept:'application/json','X-Picklog-Token':token},signal:AbortSignal.timeout(15000)});
-    if(!response.ok)throw Error(response.status===401?'auth':response.status===403?'forbidden':response.status===429?'rate_limit':'network');
+    if(!response.ok){const error=Error(response.status===401?'auth':response.status===403?'forbidden':response.status===429?'rate_limit':'network');error.status=response.status;throw error;}
     const reader=response.body.getReader(),parts=[];let size=0;
     try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>limit)throw Error('response_too_large');parts.push(value);}}
     finally{await reader.cancel().catch(()=>{});}
@@ -25,6 +25,12 @@
     if(!validToken(token) || !validProject(project))throw Error('invalid_connection');
     const data=JSON.parse(new TextDecoder().decode(await request('/api/captures',token)));
     if(!Array.isArray(data.images))throw Error('invalid_response');
+    let projects;
+    try{projects=JSON.parse(new TextDecoder().decode(await request('/api/issue-projects',token)));}
+    catch(error){if(error.status===403 || error.status===404)return {projectVerified:false};throw error;}
+    if(!Array.isArray(projects.projects))throw Error('invalid_response');
+    if(!projects.projects.some(row=>row.project_key===project))throw Error('project');
+    return {projectVerified:true};
   }
   async function upload(blob,dimensions,token,project){
     if(!validToken(token) || !validProject(project) || blob.type!=='image/png' || blob.size>16*1024*1024)throw Error('invalid_connection');
