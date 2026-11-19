@@ -24,7 +24,7 @@ function connectionState(result,{draft=false,action='check'}={}){
   let text;
   if(!result?.ok)text=`${action==='save'?'PAT 저장':'연결 확인'} 실패 · ${result?.error || '잠시 뒤 다시 시도하세요.'}${savedConnection?' 기존 저장된 PAT는 유지됩니다.':''}`;
   else if(result.connected){const when=new Date(result.checkedAt).toLocaleString('ko-KR');text=`${result.projectVerified?'인증·프로젝트 확인 완료':'PAT 인증 확인 완료 · 프로젝트는 업로드 시 확인'} · ${result.project} · ${when}${draft?' · 입력한 값은 저장을 눌러 적용하세요.':''}`;}
-  else text=savedConnection?`PAT 저장됨 · ${savedProject} · 연결 테스트로 확인하세요.`:'저장된 연결 없음 · 캡처 이미지는 미리보기에서 복사합니다.';
+  else text=savedConnection?`PAT 저장됨 · ${savedProject} · 연결 테스트로 확인하세요.`:'저장된 연결 없음 · 캡처 이미지는 이 브라우저에서 복사할 수 있습니다.';
   connectionStatus.textContent=text;
   connectionSummary.dataset.state=result?.ok?(result.connected?'verified':'unverified'):'error';
 }

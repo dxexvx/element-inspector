@@ -1,6 +1,6 @@
 (() => {
   const {defaults,valid,matches,normalizeFields}=ElementInspectorSettings;
-  let copyFields=normalizeFields(),captureEnabled=false,captureGeneration=0,pendingCapture=null;
+  let copyFields=normalizeFields(),captureEnabled=false,captureGeneration=0,pendingCapture=null,areaSelection=null;
   let shortcut=defaults, active=false, host, shadow, highlight, tooltip, target, pointer, frame, toastTimer, copying=false, pendingRequest=null;
   chrome.storage.local.get(['shortcut','copyFields','captureEnabled']).then(data=>{if(valid(data.shortcut)) shortcut=data.shortcut;copyFields=normalizeFields(data.copyFields);captureEnabled=Boolean(data.captureEnabled);}).catch(()=>{});
   chrome.storage.onChanged.addListener((changes,area)=>{
@@ -116,6 +116,9 @@
       :host{color-scheme:light} *{box-sizing:border-box}
       [data-highlight]{position:fixed;border:2px solid #1262db;background:rgb(18 98 219 / .10);pointer-events:none}
       [data-tooltip]{position:fixed;max-width:calc(100vw - 16px);width:max-content;max-height:calc(100vh - 16px);overflow:hidden;padding:10px 12px;background:#16243a;color:#fff;border-radius:4px;font:13px/1.5 system-ui,sans-serif;overflow-wrap:anywhere;white-space:pre-wrap;box-shadow:0 2px 8px #0003}
+      [data-area]{position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:0;border:0;overflow:hidden;pointer-events:auto;cursor:crosshair;touch-action:none;user-select:none;background:transparent}
+      [data-region]{position:absolute;pointer-events:none;outline:2px solid #fff;outline-offset:-2px;box-shadow:0 0 0 160vmax rgb(10 24 41 / .45)}
+      [data-area-guide]{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);word-break:keep-all;margin:0;padding:8px 12px;border-radius:4px;background:#16243a;color:#fff;font:14px/1.5 system-ui,sans-serif;text-align:center;pointer-events:none}
       strong{display:block;font-weight:600} code{font:12px/1.5 ui-monospace,monospace} .hint{margin-top:6px;color:#cbd8eb}
     </style><div data-highlight hidden></div><div data-tooltip role="status" hidden><strong>요소를 가리키세요</strong><div>클릭하여 식별자 복사 · Esc 종료</div></div>`;
     highlight=shadow.querySelector('[data-highlight]'); tooltip=shadow.querySelector('[data-tooltip]');
@@ -150,9 +153,9 @@
   function stop(remove=true) {
     active=false;copying=false;target=null;
     if(frame) cancelAnimationFrame(frame); frame=null;
-    if(remove){clearTimeout(toastTimer);host?.remove();host=null;}
+    if(remove){areaSelection=null;clearTimeout(toastTimer);host?.remove();host=null;}
   }
-  function setActive(value){if(!value){if(active)stop();return;}if(active)return;mount();active=true;draw();place();}
+  function setActive(value){if(!value){if(active)stop();return;}if(active || areaSelection)return;mount();active=true;draw();place();}
   chrome.runtime.sendMessage({type:'element-inspector:state'}).then(reply=>{if(!pendingRequest)setActive(reply.active);}).catch(()=>{});
   function sendState(value) {
     const requestId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);pendingRequest=requestId;
@@ -163,6 +166,7 @@
   function editable(e){return e.composedPath().some(n=>n instanceof Element && (n.matches('input,textarea,select') || n.isContentEditable));}
   window.addEventListener('keydown',e=>{
     if((active || host) && e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();captureGeneration++;pendingCapture=null;stop();sendState(false);return;}
+    if(areaSelection)return;
     if(matches(e,shortcut) && (active || !editable(e))){e.preventDefault();e.stopImmediatePropagation();toggle();}
   },true);
   window.addEventListener('pointermove',e=>{pointer={x:e.clientX,y:e.clientY};schedule();},true);
@@ -201,15 +205,165 @@
     try{selection?.removeAllRanges();ranges.forEach(r=>selection.addRange(r));}catch{}
     return copied;
   }
-  function captureGeometry(el){
-    const r=el.getBoundingClientRect();
-    return {rect:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:{width:innerWidth,height:innerHeight,scrollX,scrollY,scale:visualViewport?.scale || 1}};
+  function captureViewport() {
+    return { width: innerWidth, height: innerHeight, scrollX, scrollY, scale: visualViewport?.scale || 1 };
   }
+
+  function captureGeometry(el) {
+    if (!el.isConnected) return null;
+    const { x, y, width, height } = el.getBoundingClientRect();
+    return { rect: { x, y, width, height }, viewport: captureViewport() };
+  }
+
+  function afterPaint() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  function previewButton(result, label, area = false) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.style.cssText = 'display:block;pointer-events:auto;min-height:36px;margin-top:8px;padding:6px 10px;color:#16243a;background:white;border:0;border-radius:3px;cursor:pointer;font:13px system-ui';
+    button.addEventListener('click', async () => {
+      const resultMessage = await chrome.runtime.sendMessage({
+        type: 'element-inspector:open-preview', handle: result.handle, area,
+      }).catch(() => null);
+      if (!resultMessage?.ok) button.textContent = resultMessage?.error || '다시 캡처하세요.';
+    });
+    return button;
+  }
+
+  function startArea() {
+    if (areaSelection || !document.documentElement || document.visibilityState !== 'visible') return false;
+    captureGeneration++;
+    pendingCapture = null;
+    stop();
+    sendState(false);
+    mount();
+    const overlay = document.createElement('div');
+    overlay.dataset.area = '';
+    overlay.popover = 'manual';
+    overlay.innerHTML = '<div data-region hidden></div><p data-area-guide role="status">드래그하여 영역 선택 · Esc 취소</p>';
+    shadow.append(overlay);
+    overlay.showPopover();
+    areaSelection = { overlay, marker: overlay.querySelector('[data-region]'), start: null, finished: false };
+    return true;
+  }
+
+  function areaRect(start, event, viewport) {
+    const x = Math.max(0, Math.min(event.clientX, viewport.width));
+    const y = Math.max(0, Math.min(event.clientY, viewport.height));
+    return { x: Math.min(start.x, x), y: Math.min(start.y, y), width: Math.abs(x - start.x), height: Math.abs(y - start.y) };
+  }
+
+  function handleAreaPointer(event) {
+    const selection = areaSelection;
+    if (!selection) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!event.isTrusted || selection.finished) return;
+
+    if (event.type === 'pointerdown' && event.isPrimary && event.button === 0 && !selection.start) {
+      selection.start = { x: event.clientX, y: event.clientY };
+      selection.pointerId = event.pointerId;
+      selection.viewport = captureViewport();
+      selection.overlay.setPointerCapture(event.pointerId);
+      return;
+    }
+    if (!selection.start || event.pointerId !== selection.pointerId) return;
+    if (event.type === 'pointercancel') { stop(); return; }
+    const rect = areaRect(selection.start, event, selection.viewport);
+    if (event.type === 'pointermove') {
+      selection.marker.hidden = false;
+      Object.assign(selection.marker.style, { left: rect.x + 'px', top: rect.y + 'px', width: rect.width + 'px', height: rect.height + 'px' });
+      return;
+    }
+    if (event.type !== 'pointerup') return;
+    if (rect.width < 2 || rect.height < 2) {
+      selection.start = null;
+      selection.marker.hidden = true;
+      selection.overlay.querySelector('[data-area-guide]').textContent = '캡처할 범위를 드래그하세요 · Esc 취소';
+      return;
+    }
+    selection.finished = true;
+    selection.overlay.hidePopover();
+    void captureArea(rect, selection.viewport);
+  }
+
+  function cancelSelection() {
+    if (!areaSelection) return;
+    captureGeneration++;
+    pendingCapture = null;
+    stop();
+  }
+
+  if (window === window.top) {
+    for (const type of ['pointerdown','pointermove','pointerup','pointercancel','mousedown','mouseup','click','auxclick','dblclick','contextmenu','dragstart','wheel']) {
+      window.addEventListener(type, handleAreaPointer, { capture: true, passive: false });
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') cancelSelection();
+    });
+    window.addEventListener('pagehide', cancelSelection);
+  }
+
+  function showAreaResult(pending) {
+    if (pendingCapture !== pending || !host) return;
+    tooltip.hidden = false;
+    tooltip.textContent = [pending.copyMessage, pending.uploadMessage].filter(Boolean).join('\n');
+    if (pending.needsPreview) tooltip.append(previewButton(pending.image, '이미지 보기·복사', true));
+    place();
+  }
+
+  async function copyAreaImage(pending, dataUrl) {
+    try {
+      if (!document.hasFocus()) throw Error('unfocused');
+      // An insecure page may have no Async Clipboard API.
+      if (!navigator.clipboard || typeof ClipboardItem !== 'function') throw Error('clipboard_unavailable');
+      const blob = fetch(dataUrl).then(response => response.blob()).then(image => {
+        if (pendingCapture !== pending || !document.hasFocus()) throw Error('inactive');
+        return image;
+      });
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      pending.copyMessage = '이미지를 클립보드에 복사했습니다.';
+    } catch {
+      if (pendingCapture !== pending) return;
+      const preview = document.hasFocus() && await chrome.runtime.sendMessage({
+        type: 'element-inspector:open-preview', handle: pending.image.handle, area: true, autoCopy: true,
+      }).catch(() => null);
+      pending.needsPreview = !preview?.ok;
+      pending.copyMessage = preview?.ok ? '캡처한 영역을 미리보기에서 복사합니다.' : '영역을 캡처했습니다. 이미지를 복사하려면 아래 버튼을 누르세요.';
+    }
+    showAreaResult(pending);
+  }
+
+  async function captureArea(rect, viewport) {
+    const generation = ++captureGeneration;
+    const pending = { area: true, generation, measure: () => ({ rect, viewport: captureViewport() }) };
+    pendingCapture = pending;
+    await afterPaint();
+    if (pendingCapture !== pending || !host) return;
+    areaSelection.overlay.remove();
+    areaSelection = null;
+    const result = await chrome.runtime.sendMessage({
+      type: 'element-inspector:capture', area: true, rect, viewport, generation,
+    }).catch(() => null);
+    if (pendingCapture !== pending || !host) return;
+    if (!result?.ok) {
+      pending.copyMessage = result?.error || '영역을 캡처하지 못했습니다. 다시 선택하세요.';
+      showAreaResult(pending);
+    }
+    await pending.copyTask;
+    if (pendingCapture !== pending) return;
+    pendingCapture = null;
+    toastTimer = setTimeout(() => stop(), 12000);
+  }
+
   async function captureElement(el,text,css,generation){
-    pendingCapture={el,generation};
+    pendingCapture={generation,measure:()=>captureGeometry(el)};
     host.style.setProperty('visibility','hidden','important');
     // Let Chrome paint without inspector highlights before capturing the tab.
-    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await afterPaint();
     if(generation!==captureGeneration || !host)return;
     const geometry=captureGeometry(el);
     let result;
@@ -222,17 +376,50 @@
       const copied=result.publicId && document.hasFocus() && writeClipboard(combined);
       tooltip.textContent=result.publicId?(copied?`캡처를 업로드하고 참조 ID를 복사했습니다\n${result.publicId}`:`캡처를 업로드했습니다\n${result.publicId}`):`이미지를 캡처했습니다\n${result.width} × ${result.height}px`;
       const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;margin-top:8px;pointer-events:auto';
-      const button=document.createElement('button');button.type='button';button.textContent='이미지 보기·복사';
+      const button=previewButton(result,'이미지 보기·복사');button.style.marginTop='0';
       const style='pointer-events:auto;min-height:36px;padding:6px 10px;color:#16243a;background:white;border:0;border-radius:3px;cursor:pointer;font:13px system-ui';button.style.cssText=style;
-      button.addEventListener('click',async()=>{try{const opened=await chrome.runtime.sendMessage({type:'element-inspector:open-preview',handle:result.handle});if(!opened?.ok)button.textContent=opened?.error || '요소를 다시 캡처하세요.';}catch{button.textContent='요소를 다시 캡처하세요.';}});actions.append(button);
+      actions.append(button);
       if(result.publicId){const copy=document.createElement('button');copy.type='button';copy.textContent='참조 포함 다시 복사';copy.style.cssText=style;copy.addEventListener('click',()=>{copy.textContent=writeClipboard(combined)?'복사했습니다':'다시 시도해주세요';});actions.append(copy);}
       tooltip.append(actions);
     }else tooltip.textContent=result?.error || '캡처를 마치지 못했습니다. 요소 정보는 복사했습니다.';
     place();toastTimer=setTimeout(()=>stop(),12000);
   }
   chrome.runtime.onMessage.addListener((message,sender,reply)=>{
-    if(message.type==='element-inspector:capture-progress'){if(pendingCapture?.generation===message.generation && host){host.style.visibility='';tooltip.textContent='이미지를 저장하고 있습니다…';place();}reply({ok:true});return;}
-    if(message.type==='element-inspector:validate-capture'){reply({valid:Boolean(pendingCapture?.el?.isConnected && pendingCapture.generation===message.generation),...(pendingCapture?captureGeometry(pendingCapture.el):{})});return;}
+    if (message.type === 'element-inspector:start-area') {
+      reply({ ok: window === window.top && startArea() });
+      return;
+    }
+    if (message.type === 'element-inspector:cancel-area') {
+      cancelSelection();
+      return;
+    }
+    if (message.type === 'element-inspector:validate-capture') {
+      const geometry = pendingCapture?.generation === message.generation
+        && document.visibilityState === 'visible' && pendingCapture.measure();
+      reply(geometry ? { valid: true, ...geometry } : { valid: false });
+      return;
+    }
+    if (message.type === 'element-inspector:capture-progress') {
+      const pending = pendingCapture;
+      if (pending?.generation !== message.generation || !host) { reply({ ok: false }); return; }
+      if (pending.area) {
+        if (message.image) {
+          const { dataUrl, ...image } = message.image;
+          pending.image = image;
+          pending.copyMessage = '캡처한 이미지를 복사하고 있습니다…';
+          pending.copyTask = copyAreaImage(pending, dataUrl);
+        }
+        if (message.upload) pending.uploadMessage = `Picklog 캔버스에 저장했습니다. (${message.upload.publicId})`;
+        if (message.uploadError) pending.uploadMessage = message.uploadError;
+        showAreaResult(pending);
+      } else {
+        host.style.visibility = '';
+        tooltip.textContent = '이미지를 저장하고 있습니다…';
+        place();
+      }
+      reply({ ok: true });
+      return;
+    }
     if(message.type==='element-inspector:set'){if(!pendingRequest || message.requestId===pendingRequest)setActive(message.active);reply({active});}
   });
 })();

@@ -16,16 +16,16 @@ Windows PowerShell은 `git clone https://github.com/dxexvx/element-inspector.git
 
 ## 처음 설치
 
-1. 저장소의 **Code → Download ZIP**을 누릅니다. [main ZIP 바로 받기](https://github.com/dxexvx/element-inspector/archive/refs/heads/main.zip)도 가능합니다.
+1. [최신 GitHub 릴리스](https://github.com/dxexvx/element-inspector/releases/latest)에서 **element-inspector-버전.zip**을 받습니다.
 2. Windows는 ZIP 오른쪽 클릭 → **압축 풀기**, macOS는 ZIP 더블 클릭, Linux는 압축 관리자의 풀기 기능을 사용합니다.
-3. 압축을 푼 `element-inspector-main` 폴더를 오래 유지할 위치로 옮깁니다. 예: `문서/chrome-browser/element-inspector`. 다운로드 폴더의 자동 정리 대상에 두지 않는 편이 좋습니다.
+3. 압축을 푼 `manifest.json`이 들어 있는 폴더를 오래 유지할 위치로 옮깁니다. 예: `문서/chrome-browser/element-inspector`. 다운로드 폴더의 자동 정리 대상에 두지 않는 편이 좋습니다.
 4. 그 폴더 바로 안에 `manifest.json`, `content.js`, `background.js`, `shared.js`, `popup.html`, `options.html`, `icons`가 있는지 확인합니다. 소스가 이미 실행 가능한 형태여서 빌드·npm 설치·서버가 필요하지 않습니다.
 5. Chrome에서 `chrome://extensions`를 엽니다. 오른쪽 위 **개발자 모드**를 켭니다.
 6. **압축해제된 확장 프로그램을 로드합니다**를 누르고 **manifest.json이 바로 들어 있는 폴더**를 선택합니다. 파일 자체나 ZIP, 한 단계 위 폴더는 고르지 않습니다.
 7. 목록에 **엘리먼트 검사기**와 파란 선택 영역/포인터 아이콘이 보이면 설치됐습니다.
 8. 일반 HTTP/HTTPS 웹페이지를 새로고침합니다. Alt+Shift+E(맥:Option+Shift+E)로 검사를 켜고 요소를 가리킨 다음 클릭합니다. 메모장/텍스트 편집기에 붙여넣어 결과를 확인합니다. Esc는 취소입니다.
 
-이미지 캡처는 설정에서 별도로 켜고 화면 캡처 선택 권한을 허용해야 합니다. 기존 텍스트 복사에는 이 권한이 필요하지 않습니다. Picklog 연결은 고급 설정에서 기존 PAT와 프로젝트 키로 설정하며 브라우저 재시작·확장 재로드 후에도 저장된 PAT를 재사용합니다. 연결 테스트는 입력값을 저장하지 않으며, 하단 저장 하나로 전체 설정과 PAT·프로젝트를 함께 보관합니다. 실제 인증·프로젝트 확인 결과는 설정에 표시됩니다. 자세한 사용법은 [README](README.md#요소-이미지와-picklog-연결-130)를 따릅니다.
+영역을 캡처하려면 **Alt+Shift+W**(Mac에서는 **Option+Shift+W**)를 누른 뒤 드래그합니다. 요소를 클릭할 때의 이미지 캡처는 설정에서 켜고 권한을 허용합니다. 기존 텍스트 복사에는 이 권한이 필요하지 않습니다. Picklog 연결은 고급 설정에서 기존 PAT와 프로젝트 키로 설정하며 브라우저 재시작·확장 재로드 후에도 저장된 PAT를 재사용합니다. 연결 테스트는 입력값을 저장하지 않으며, 하단 저장 하나로 전체 설정과 PAT·프로젝트를 함께 보관합니다. 실제 인증·프로젝트 확인 결과는 설정에 표시됩니다. 자세한 사용법은 [README](README.md#요소-이미지와-picklog-연결-130)를 따릅니다.
 
 Chrome 웹 스토어·chrome:// 내부 화면·PDF 뷰어 등 제한 화면에서는 동작하지 않습니다. 처음에는 일반 웹페이지에서 확인하세요. 툴바에서 확장 아이콘을 고정하면 설정과 켜기/끄기를 쉽게 찾을 수 있습니다.
 

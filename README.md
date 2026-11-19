@@ -7,7 +7,7 @@
 
 ## 설치
 
-1. [소스 ZIP](https://github.com/dxexvx/element-inspector/archive/refs/heads/main.zip)을 받아 압축을 풉니다. Git 사용자는 아래 명령을 사용합니다.
+1. [최신 GitHub 릴리스](https://github.com/dxexvx/element-inspector/releases/latest)에서 `element-inspector-버전.zip`을 받아 압축을 풉니다. Git 사용자는 아래 명령을 사용합니다.
 2. 폴더를 오래 유지할 위치에 둡니다. 예: `문서/chrome-browser/element-inspector`.
 3. Chrome의 `chrome://extensions` → **개발자 모드** → **압축해제된 확장 프로그램을 로드합니다**에서 **이 저장소 루트**를 선택합니다. 바로 안에 `manifest.json`이 있어야 합니다.
 4. 목록에서 **엘리먼트 검사기**와 버전을 확인하고 일반 웹페이지를 새로고침합니다. 설치에 Node.js·빌드·Web Store 계정은 필요하지 않습니다.
@@ -33,11 +33,19 @@ git clone https://github.com/dxexvx/element-inspector.git "$HOME/chrome-browser/
 - 열린 Shadow DOM은 `#host >>> #inside`처럼 경계를 표시합니다. `>>>`는 전달용 표기이며 하나의 `querySelector`에 넣는 표준 CSS가 아닙니다. 각 경계에서 `shadowRoot`로 들어가세요.
 - HTTP(S) iframe에서도 강조·복사가 작동하며 프레임 주소를 함께 표시합니다. 영역 제목은 가까운 heading·영역 이름을 우선 사용하며 찾지 못하면 `(제목 없음)`으로 표시합니다. 표시된 텍스트는 최대240자(영역 제목120자, 문서 제목200자)로 제한하며 입력·선택·편집칸의 값은 렌더링된 텍스트 추출에서 제외합니다. 알려진 인증 관련 URL 인자도 제외하지만, 화면 내용·URL 경로·요소 식별자에 민감정보가 남을 수 있어 붙여넣기 전에 확인하세요.
 
+## 영역 캡처
+
+1. 웹페이지에서 **Alt + Shift + W**를 누릅니다. macOS에서는 **Option + Shift + W**입니다.
+2. 화면에서 원하는 직사각형을 드래그하고 놓으면 선택한 영역이 PNG로 복사됩니다. **Esc**로 취소합니다. 현재 페이지에서 클립보드 쓰기가 막히면 미리보기에서 복사합니다.
+3. 고급 설정에 Picklog PAT와 저장 프로젝트를 저장해 두면 같은 PNG를 캔버스에도 올립니다. 업로드 실패는 화면에 표시되며 이미 복사한 이미지에는 영향이 없습니다.
+
+영역 캡처는 요소 이미지 설정과 별도로 실행됩니다. 보이는 화면만 캡처하며 입력값과 개인정보가 이미지에 포함될 수 있습니다. 단축키를 확인하거나 바꾸려면 `chrome://extensions/shortcuts`를 엽니다.
+
 ## 범위
 
 Chrome 내부 페이지·웹 스토어·PDF 뷰어 등 Chrome이 확장 실행을 막는 화면, file:// 페이지, 닫힌 Shadow DOM은 대상 밖입니다. 브라우저/운영체제 예약 단축키는 사용할 수 없으며 다른 확장/페이지와 충돌하면 설정에서 조합키를 바꾸세요. 페이지의 입력/편집 영역에서는 비활성 검사기의 단축키를 가로채지 않습니다.
 
-검사기는 사용자 클릭 시에만 식별자를 복사합니다. 텍스트 복사문은 서버로 보내지 않으며, 사용자가 캡처와 Picklog 연결을 켠 경우 선택한 이미지만 Picklog로 보냅니다. `storage`는 단축키·탭 검사 상태 저장, `clipboardWrite`는 선택한 정보와 미리보기의 이미지를 복사하는 데 사용합니다. HTTP(S) content script는 모든 사이트에서 조합키를 받기 위한 것이며 사이트 접근 권한 안내가 표시됩니다.
+검사기는 사용자 클릭 시에만 식별자를 복사합니다. 텍스트 복사문은 서버로 보내지 않으며, Picklog 연결을 저장한 경우 요소 캡처나 영역 선택으로 만든 PNG를 Picklog로 보냅니다. `storage`는 단축키·탭 검사 상태 저장, `clipboardWrite`는 정보와 이미지 복사에 사용합니다. `activeTab`은 영역 캡처 단축키를 누른 탭에 대한 임시 권한입니다. HTTP(S) content script는 모든 사이트에서 조합키를 받기 위한 것이며 사이트 접근 권한 안내가 표시됩니다.
 
 ## 개발·검증
 
@@ -53,7 +61,14 @@ npm run package
 
 `QA_DIR`은 실행 증거의 명시적인 보관 경로입니다. 테스트는 임시 Chromium 프로필에 실제 확장을 설치하고 설정 저장·단축키·강조 geometry·실제 clipboard readback·클릭 차단과 복귀·iframe·Shadow DOM·실패 안내·반응형을 검사합니다. 사용자 Chrome 프로필은 변경하지 않습니다. 테스트 fixture와 Chromium의 실제 클립보드에 검증용 식별자가 복사됩니다.
 
-공식 근거: [Chrome commands API](https://developer.chrome.com/docs/extensions/reference/api/commands), [Playwright의 실제 확장 로드](https://playwright.dev/docs/chrome-extensions). Chrome commands에는 조합키를 프로그램으로 수정하는 API가 없어 설정 화면의 페이지 키 이벤트 조합을 사용합니다.
+공식 근거: [Chrome commands API](https://developer.chrome.com/docs/extensions/reference/api/commands), [Playwright의 실제 확장 로드](https://playwright.dev/docs/chrome-extensions). 요소 검사 단축키는 확장 설정에서, 영역 캡처 단축키는 Chrome에서 변경합니다.
+
+영역 캡처의 macOS 회귀 검증은 실 Chrome 명령 단축키를 보냅니다. 격리 테스트용 브라우저에만 입력합니다.
+
+```sh
+swiftc tests/native-area-shortcut.swift -o /tmp/element-inspector-area-shortcut
+QA_DIR=/verified/external/run NATIVE_SHORTCUT=/tmp/element-inspector-area-shortcut npm run test:area
+```
 
 ## 업데이트
 

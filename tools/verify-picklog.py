@@ -13,14 +13,16 @@ import resource
 import stat
 import subprocess
 import sys
+import tempfile
 
 PIN = '62e1e064bae1de2aceea3d03a1aa3321bc369c63756a2188664f113396d47ed0'
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    if len(sys.argv) != 2:
-        raise ValueError('Use verify-picklog.py /verified/external/run')
+    if len(sys.argv) not in {2, 3} or (len(sys.argv) == 3 and sys.argv[2] != '--area'):
+        raise ValueError('Use verify-picklog.py /verified/external/run [--area]')
+    area = len(sys.argv) == 3
     out = Path(sys.argv[1]).resolve(strict=True)
     artifact_root = Path('/Volumes/1TB_SK_NVME/Artifacts/AgentOps/VerificationEvidence/runs').resolve(strict=True)
     if not out.is_relative_to(artifact_root) or out == artifact_root:
@@ -37,24 +39,33 @@ def main():
     spec = importlib.util.spec_from_file_location('approved_picklog_machine', consumer)
     base = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(base)
-    values = base.load_service('picklog-api')
-    try:
-        # Fixed code is reviewed with the extension; the only secret transport is stdin.
-        env = {key: value for key, value in os.environ.items() if key in {'PATH', 'HOME', 'TMPDIR', 'LANG'}}
-        env['QA_DIR'] = str(out)
-        result = subprocess.run(['node', str(ROOT / 'tests/picklog-live.cjs')], cwd=ROOT, env=env,
-                                input=json.dumps({'token': values['token'].decode('ascii'), 'project': 'CHROMEEXT'}).encode(),
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
-        # Child output is restricted to its non-secret summary. Raw stderr is never printed.
-        if result.stdout:
-            payload = json.loads(result.stdout)
-            if set(payload) - {'passed', 'publicId', 'cleanup', 'durationMs', 'error'}:
-                raise ValueError('child_output_rejected')
-            print(json.dumps(payload))
-        if result.returncode:
-            raise ValueError('live_verification_failed')
-    finally:
-        base.wipe(values)
+    env = {key: value for key, value in os.environ.items() if key in {'PATH', 'HOME', 'TMPDIR', 'LANG'}}
+    env['QA_DIR'] = str(out)
+    args = ['node', str(ROOT / 'tests/picklog-live.cjs')]
+    with tempfile.TemporaryDirectory(prefix='element-inspector-qa-') as scratch:
+        if area:
+            args.append('--area')
+            if sys.platform == 'darwin':
+                helper = str(Path(scratch) / 'press-area-shortcut')
+                subprocess.run(['/usr/bin/swiftc', str(ROOT / 'tests/native-area-shortcut.swift'), '-o', helper],
+                               check=True, capture_output=True, timeout=25)
+                env['NATIVE_SHORTCUT'] = helper
+        values = base.load_service('picklog-api')
+        try:
+            # Fixed code is reviewed with the extension; the only secret transport is stdin.
+            result = subprocess.run(args, cwd=ROOT, env=env,
+                                    input=json.dumps({'token': values['token'].decode('ascii'), 'project': 'CHROMEEXT'}).encode(),
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            # Child output is restricted to its non-secret summary. Raw stderr is never printed.
+            if result.stdout:
+                payload = json.loads(result.stdout)
+                if set(payload) - {'passed', 'publicId', 'cleanup', 'durationMs', 'error'}:
+                    raise ValueError('child_output_rejected')
+                print(json.dumps(payload))
+            if result.returncode:
+                raise ValueError('live_verification_failed')
+        finally:
+            base.wipe(values)
 
 
 if __name__ == '__main__':

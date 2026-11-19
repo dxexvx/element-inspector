@@ -32,9 +32,9 @@
     if(!projects.projects.some(row=>row.project_key===project))throw Error('project');
     return {projectVerified:true};
   }
-  async function upload(blob,dimensions,token,project){
+  async function upload(blob,dimensions,token,project,area=false){
     if(!validToken(token) || !validProject(project) || blob.type!=='image/png' || blob.size>16*1024*1024)throw Error('invalid_connection');
-    const body=new FormData();body.set('file',blob,'element.png');body.set('title','엘리먼트 캡처');body.set('projectKey',project);body.set('width',String(dimensions.width));body.set('height',String(dimensions.height));
+    const body=new FormData();body.set('file',blob,area?'area.png':'element.png');body.set('title',area?'영역 캡처':'엘리먼트 캡처');body.set('projectKey',project);body.set('width',String(dimensions.width));body.set('height',String(dimensions.height));
     const data=JSON.parse(new TextDecoder().decode(await request('/api/captures',token,{method:'POST',body},65536)));
     const image=data?.image;
     if(!/^cap_[A-Za-z0-9]{10,80}$/.test(image?.public_id) || image.issue_project_key!==project)throw Error('upload_unverified');
